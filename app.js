@@ -4,7 +4,7 @@ const enc = new TextEncoder(), dec = new TextDecoder();
 const AAD = enc.encode('career-desk-v1');
 const model = {data:null,key:null,config:null,checks:{version:2,rows:{}},view:'saved',page:0,local:false,csrf:'',token:'',save:Promise.resolve()};
 const labels = {saved:'Salvati LinkedIn',jobs:'Tutti gli annunci',companies:'Aziende e recruiter',documents:'Libreria CV',reviews:'Revisioni ATS'};
-const statuses = {not_started:'Da analizzare',running:'Analisi in corso',awaiting_visual_review:'Verifica visiva',ready:'CV verificato',needs_correction:'Da correggere',failed:'Da riprovare',budget_paused:'Budget raggiunto',incomplete_posting:'Testo incompleto'};
+const statuses = {not_started:'Da analizzare',running:'Analisi in corso',awaiting_visual_review:'Verifica visiva',ready:'CV verificato',needs_correction:'Da correggere',failed:'Da riprovare',interrupted:'Da riprendere',service_paused:'API da verificare',budget_paused:'Budget raggiunto',incomplete_posting:'Testo incompleto'};
 const unb64 = text => Uint8Array.from(atob(text), c=>c.charCodeAt(0));
 function b64(bytes){let text='';for(let i=0;i<bytes.length;i+=16384)text+=String.fromCharCode(...bytes.subarray(i,i+16384));return btoa(text);}
 function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
@@ -30,9 +30,11 @@ async function unlock(password){
   $('login').hidden=true;$('workspace').hidden=false;
   $('run-all').hidden=!model.local;$('publish').hidden=!model.local;
   $('agent-mode').textContent=model.local?'Agenti locali collegati':'Agenti sul PC';
-  $('agent-count').textContent=model.local?'Pronti per la revisione':'Consultazione da web';
+  $('agent-count').textContent=model.local?'Stato in aggiornamento':'Consultazione da web';
   populateAreas();render();await persist(false);
+  if(model.local)refreshWorker();
 }
+async function refreshWorker(){if(!model.local||!model.data)return;try{const state=await localAPI('status');$('agent-count').textContent=state.running?'Ciclo di revisione in corso':'Nessun ciclo in esecuzione';model.running=state.running;if(model.revision!==state.revision){model.revision=state.revision;model.data=await localAPI('catalog');render();}}catch{$('agent-count').textContent='Connessione locale da verificare';}}
 async function persist(sync=true){
   const snapshot=structuredClone(model.checks);
   model.save=model.save.catch(()=>{}).then(async()=>{
@@ -52,6 +54,9 @@ function renderMetrics(){
   const reviewed=d.jobs.filter(j=>j.review).length;$('count-reviews').textContent=reviewed;
   $('metric-total').textContent=a.complete_jobs;$('metric-cvs').textContent=d.documents.filter(x=>x.ready).length;
   $('metric-sent').textContent=Object.values(model.checks.rows).filter(r=>r.checked).length;$('metric-review').textContent=reviewed;
+  const budget=d.budget,calls=Object.values(budget?.calls||{}),used=calls.reduce((sum,c)=>sum+(c.actual_usd??c.reserved_usd),0);
+  $('budget-info').textContent=budget?`Ciclo API: fino a $${used.toFixed(2)} / $${budget.limit_usd.toFixed(2)}`:'';
+  $('budget-info').title='Stima prudente: include le riserve per chiamate senza risposta. Non e la fattura OpenAI.';
 }
 function allRows(){const d=model.data;switch(model.view){case'saved':return d.jobs.filter(j=>j.saved);case'companies':return d.companies;case'documents':return d.documents.map(doc=>({id:'cv:'+doc.id,cv_id:doc.id,name:doc.folder,role:doc.group,kind:'document',cv_ready:doc.ready}));case'reviews':return d.jobs.filter(j=>j.complete);default:return d.jobs;}}
 function visibleRows(){const q=$('search').value.toLocaleLowerCase('it'),area=$('area').value,status=$('status').value;return allRows().filter(r=>{
@@ -93,6 +98,7 @@ function showDetail(row){
   if(row.posting)actions.append(button('Job posting PDF','file-text',()=>download(row.posting,row.job_id,'posting')));
   if(row.kind==='job'&&row.complete&&model.local)actions.append(button('Revisiona CV','scan-text',()=>runReviews([row.job_id])));
   root.append(actions);
+  if(row.draft&&model.local){const s=section(root,'Bozza da verificare');s.append(button('Controlla le due pagine','eye',()=>showPreview(row,s)));}
   if(row.kind==='job'){root.append(node('p','Copia archiviata del '+(row.captured_at?new Date(row.captured_at).toLocaleDateString('it-IT'):'periodo di raccolta')+'. Apertura attuale non verificata.','notice'));}
   else if(row.note)root.append(node('p',row.note,'notice'));
   if(row.review){
@@ -109,6 +115,21 @@ function showDetail(row){
   if(row.status&&row.kind==='company')section(root,'Stato del target').append(node('p',row.status));
   if(row.kind!=='document'){const s=section(root,'Note personali');const area=node('textarea');area.value=model.checks.rows[row.id]?.note||'';area.setAttribute('aria-label','Note personali');s.append(area);s.append(button('Salva note','save',()=>{setRow(row.id,{note:area.value});toast('Note salvate');}));}
   $('detail').showModal();icons();
+}
+async function showPreview(row,parent){
+  parent.replaceChildren(node('h3','Controllo finale'));
+  const checks=[],approveButton=button('Approva e salva su Drive','check',async()=>{
+    approveButton.disabled=true;
+    try{const result=await localAPI('approve',{job_id:row.job_id,docx_sha:row.draft.docx_sha,pdf_sha:row.draft.pdf_sha,reviewed_pages:[1,2]});toast(result.message);$('detail').close();model.data=await localAPI('catalog');render();}
+    catch(e){toast(e.message);approveButton.disabled=false;}
+  },'primary');approveButton.disabled=true;
+  try{for(const page of [1,2]){
+    const response=await fetch(`/api/preview?job_id=${encodeURIComponent(row.job_id)}&page=${page}&pdf_sha=${row.draft.pdf_sha}`,{headers:{'X-Desk-Client':'1'}});
+    if(!response.ok)throw new Error('Anteprima cambiata o non disponibile. Aggiorna la dashboard.');
+    const url=URL.createObjectURL(await response.blob()),img=node('img');img.src=url;img.alt='Anteprima CV pagina '+page;img.className='cv-preview';img.onload=()=>URL.revokeObjectURL(url);parent.append(img);
+    const label=node('label',undefined,'review-confirmation'),check=node('input');check.type='checkbox';checks.push(check);label.append(check,document.createTextNode('Pagina '+page+' verificata: contenuti corretti e impaginazione leggibile'));parent.append(label);
+    check.onchange=()=>{approveButton.disabled=checks.length!==2||!checks.every(c=>c.checked);};
+  }parent.append(approveButton);icons();}catch(e){parent.append(node('p',e.message,'notice'));}
 }
 function saveBlob(value,name,type){const url=URL.createObjectURL(new Blob([value],{type}));const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
 async function download(file,id,format){try{toast('Apertura documento…');let data;if(model.local){const r=await fetch(`/api/file?id=${encodeURIComponent(id)}&format=${format}`,{headers:{'X-Desk-Client':'1'}});if(!r.ok)throw new Error('Documento non disponibile');data=await r.arrayBuffer();}else data=await decrypt(await fetchJSON(file.encrypted_url));saveBlob(data,file.name,format==='docx'?'application/vnd.openxmlformats-officedocument.wordprocessingml.document':'application/pdf');toast('Documento pronto');}catch(e){toast(e.message);}}
@@ -140,3 +161,4 @@ $('lock').onclick=()=>{model.data=null;model.key=null;model.token='';model.check
 $('refresh').onclick=async()=>{try{if(model.local)model.data=await localAPI('catalog');else{model.data=JSON.parse(dec.decode(await decrypt(await fetchJSON('catalog.enc'))));const shared=JSON.parse(dec.decode(await decrypt(await fetchJSON('state.enc'))));model.checks=merge(model.data.state,shared,model.checks);}render();toast('Dashboard aggiornata');}catch(e){toast(e.message);}};
 $('run-all').onclick=()=>runReviews();$('publish').onclick=async()=>{try{toast('Pubblicazione in corso…');const result=await localAPI('publish',{});toast(result.message);}catch(e){toast(e.message);}};
 (async()=>{icons();try{if(location.hostname==='127.0.0.1'||location.hostname==='localhost'){const runtime=await localAPI('runtime');model.local=runtime.local;model.csrf=runtime.csrf;if(runtime.password){await unlock(runtime.password);return;}}}catch{}const params=new URLSearchParams(location.hash.slice(1));const password=params.get('key');if(password){history.replaceState(null,'',location.pathname+location.search);try{await unlock(password);}catch{$('login-error').textContent='Accesso automatico non riuscito.';}}})();
+setInterval(refreshWorker,10000);
