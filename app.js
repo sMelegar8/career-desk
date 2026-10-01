@@ -51,14 +51,14 @@ function populateAreas(){const select=$('area'),current=select.value;select.repl
 function renderMetrics(){
   const d=model.data,a=d.audit;
   $('count-saved').textContent=a.saved_jobs;$('count-jobs').textContent=a.all_jobs;$('count-companies').textContent=a.companies;$('count-documents').textContent=a.cvs;
-  const reviewed=d.jobs.filter(j=>j.review).length;$('count-reviews').textContent=reviewed;
+  const reviewed=[...d.jobs,...d.companies].filter(j=>j.review).length;$('count-reviews').textContent=reviewed;
   $('metric-total').textContent=a.complete_jobs;$('metric-cvs').textContent=d.documents.filter(x=>x.ready).length;
   $('metric-sent').textContent=Object.values(model.checks.rows).filter(r=>r.checked).length;$('metric-review').textContent=reviewed;
   const budget=d.budget,calls=Object.values(budget?.calls||{}),used=calls.reduce((sum,c)=>sum+(c.actual_usd??c.reserved_usd),0);
   $('budget-info').textContent=budget?`Ciclo API: fino a $${used.toFixed(2)} / $${budget.limit_usd.toFixed(2)}`:'';
   $('budget-info').title='Stima prudente: include le riserve per chiamate senza risposta. Non e la fattura OpenAI.';
 }
-function allRows(){const d=model.data;switch(model.view){case'saved':return d.jobs.filter(j=>j.saved);case'companies':return d.companies;case'documents':return d.documents.map(doc=>({id:'cv:'+doc.id,cv_id:doc.id,name:doc.folder,role:doc.group,kind:'document',cv_ready:doc.ready}));case'reviews':return d.jobs.filter(j=>j.complete);default:return d.jobs;}}
+function allRows(){const d=model.data;switch(model.view){case'saved':return d.jobs.filter(j=>j.saved);case'companies':return d.companies;case'documents':return d.documents.map(doc=>({id:'cv:'+doc.id,cv_id:doc.id,name:doc.folder,role:doc.group,kind:'document',cv_ready:doc.ready}));case'reviews':return [...d.companies.filter(c=>c.review),...d.jobs.filter(j=>j.complete)];default:return d.jobs;}}
 function visibleRows(){const q=$('search').value.toLocaleLowerCase('it'),area=$('area').value,status=$('status').value;return allRows().filter(r=>{
   if(q&&!`${r.company||r.name} ${r.title||r.role} ${r.location||r.place} ${r.activity||''} ${r.description||''}`.toLocaleLowerCase('it').includes(q))return false;
   if(area&&!`${r.location||r.place||''} ${r.g||''}`.toLowerCase().includes(area))return false;
@@ -95,7 +95,9 @@ function showDetail(row){
   const root=$('detail-content');root.replaceChildren();const actions=node('div',undefined,'actions');
   const url=row.link||row.url;if(url)actions.append(safeLink(url,row.kind==='job'?'Annuncio originale':'Sito / candidature'));
   const doc=getDoc(row);if(doc){for(const fmt of ['pdf','docx'])if(doc.files[fmt])actions.append(button(fmt==='pdf'?'CV PDF':'CV Word','download',()=>download(doc.files[fmt],doc.id,fmt),'ready'));if(doc.drive_url)actions.append(safeLink(doc.drive_url,'Cartella Drive'));}
-  if(row.posting)actions.append(button('Job posting PDF','file-text',()=>download(row.posting,row.job_id,'posting')));
+  if(row.posting)actions.append(button(row.posting.complete===false?'Annuncio PDF (parziale)':'Job posting PDF','file-text',()=>download(row.posting,row.job_id,'posting')));
+  if(row.company_website)actions.append(safeLink(row.company_website,'Sito aziendale'));
+  else if(row.kind==='job')actions.append(node('span','Sito aziendale da verificare','muted'));
   if(row.kind==='job'&&row.complete&&model.local)actions.append(button('Revisiona CV','scan-text',()=>runReviews([row.job_id])));
   root.append(actions);
   if(row.draft&&model.local){const s=section(root,'Bozza da verificare');s.append(button('Controlla le due pagine','eye',()=>showPreview(row,s)));}
@@ -103,6 +105,9 @@ function showDetail(row){
   else if(row.note)root.append(node('p',row.note,'notice'));
   if(row.review){
     const review=row.review;
+    if(review.source_url)root.append(safeLink(review.source_url,'Fonte della review'));
+    if(review.status)root.append(node('p',review.status,'notice'));
+    if(review.verdict)root.append(node('p',review.verdict));
     if(row.review_scores)root.append(node('p',`Affinità documentata ${row.review_scores.candidate_fit}/10 · Qualità del testo ${row.review_scores.writing_quality}/10 · Valutazioni interne, non punteggi ATS universali`,'muted'));
     let s=section(root,'1. Keyword e gap');
     for(const k of review.keywords){s.append(node('h4',k.keyword+' · '+k.support),node('blockquote',k.posting_quote));if(k.cv_quote)s.append(node('p','CV: '+k.cv_quote));s.append(node('p',k.action));}
