@@ -107,7 +107,7 @@ function showDetail(row){
     const review=row.review;
     if(review.source_url)root.append(safeLink(review.source_url,'Fonte della review'));
     if(review.status)root.append(node('p',review.status,'notice'));
-    if(review.verdict)root.append(node('p',review.verdict));
+    if(review.verdict&&review.verdict!==row.note)root.append(node('p',review.verdict));
     if(row.review_scores)root.append(node('p',`Affinità documentata ${row.review_scores.candidate_fit}/10 · Qualità del testo ${row.review_scores.writing_quality}/10 · Valutazioni interne, non punteggi ATS universali`,'muted'));
     let s=section(root,'1. Keyword e gap');
     for(const k of review.keywords){s.append(node('h4',k.keyword+' · '+k.support),node('blockquote',k.posting_quote));if(k.cv_quote)s.append(node('p','CV: '+k.cv_quote));s.append(node('p',k.action));}
