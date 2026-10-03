@@ -11,6 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="style.css">
   <script src="lucide.min.js" defer></script>
+  <script src="agent_saved.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -29,6 +30,7 @@
     <div class="app-layout">
       <aside class="navigation"><div class="nav-label">CANDIDATURE</div><nav aria-label="Viste">
         <button data-view="saved" class="active"><i data-lucide="bookmark"></i> Salvati LinkedIn <span id="count-saved"></span></button>
+        <button data-view="agent"><i data-lucide="sparkles"></i> Salvati da AI Job Agent <span id="count-agent">0</span></button>
         <button data-view="jobs"><i data-lucide="briefcase-business"></i> Tutti gli annunci <span id="count-jobs"></span></button>
         <button data-view="companies"><i data-lucide="building-2"></i> Aziende e recruiter <span id="count-companies"></span></button>
         <button data-view="documents"><i data-lucide="files"></i> Libreria CV <span id="count-documents"></span></button>
@@ -37,6 +39,7 @@
       <main><div class="page-heading"><div><h1 id="view-title">Salvati LinkedIn</h1><p id="view-subtitle"></p></div><span id="updated" class="muted"></span></div>
         <div class="metrics"><div><span id="metric-total">0</span><span>annunci completi</span></div><div><span id="metric-cvs">0</span><span>CV verificati</span></div><div><span id="metric-sent">0</span><span>candidature inviate</span></div><div><span id="metric-review">0</span><span>revisioni analizzate</span></div></div>
         <div class="toolbar"><label class="search"><i data-lucide="search"></i><input id="search" type="search" placeholder="Cerca azienda, ruolo, competenza" aria-label="Cerca"></label><select id="area" aria-label="Area"><option value="">Tutte le aree</option></select><select id="status" aria-label="Stato"><option value="">Tutti gli stati</option><option value="unsent">Non inviati</option><option value="sent">Inviati</option><option value="ready">CV pronto</option><option value="complete">Annuncio completo</option><option value="incomplete">Testo da integrare</option></select></div>
+        <div id="agent-panel" class="notice" hidden><p>Documenti nel repository privato. Il CV resta una bozza tailored da verificare prima dell'invio. Dal PC viene usato l'accesso GitHub locale; dal telefono serve un token limitato ad Auto-LinkdIn-v2.0 con permesso Contents: read, conservato solo in memoria fino al blocco o alla chiusura.</p><label for="agent-token">Accesso alla raccolta privata</label><input type="password" id="agent-token" autocomplete="off"><button id="agent-connect" class="primary">Collega / aggiorna raccolta</button><p id="agent-message" role="status"></p></div>
         <div id="results-status" class="result-label" aria-live="polite"></div>
         <div class="table-wrap"><table><thead><tr><th class="check-cell"><span class="sr-only">Inviato</span></th><th>Azienda / ruolo</th><th class="location-cell">Sede</th><th>Documenti</th><th>Revisione</th><th class="open-cell"><span class="sr-only">Apri</span></th></tr></thead><tbody id="rows"></tbody></table></div>
         <div id="empty" hidden>Nessun risultato con questi filtri.</div>
