@@ -90,7 +90,11 @@ function render(){
     const tr=node('tr');tr.dataset.id=row.id;tr.classList.toggle('sent',!!model.checks.rows[row.id]?.checked);
     const check=node('td',undefined,'check-cell');if(row.kind!=='document'){const input=node('input');input.type='checkbox';input.checked=!!model.checks.rows[row.id]?.checked;input.setAttribute('aria-label','Inviato a '+(row.company||row.name));input.addEventListener('change',()=>{setRow(row.id,{checked:input.checked});tr.classList.toggle('sent',input.checked);});check.append(input);}
     const main=node('td');main.append(node('div',row.company||row.name,'company'),node('div',row.title||row.role,'role'));
-    if(row.kind==='job')main.append(node('div',row.saved?'Salvato LinkedIn':'Ricerca archiviata','subline'));
+    if(row.kind==='job'){
+      main.append(node('div',row.saved?'Salvato LinkedIn':'Ricerca archiviata','subline'));
+      const observed=row.first_seen_at||row.captured_at;
+      if(row.saved&&observed)main.append(node('div','Rilevato il '+new Date(observed).toLocaleDateString('it-IT'),'subline'));
+    }
     const place=node('td',row.location||row.place||'—','location-cell');
     const files=node('td'),actions=node('div',undefined,'file-actions'),doc=getDoc(row);
     if(row.kind==='agent'){for(const kind of ['cv','posting','company'])if(row.files[kind])actions.append(button(row.files[kind].label,'download',()=>downloadAgent(row,kind)));}
@@ -123,7 +127,12 @@ function showDetail(row){
   if(row.kind==='job'&&row.complete&&model.local)actions.append(button('Revisiona CV','scan-text',()=>runReviews([row.job_id])));
   root.append(actions);
   if(row.draft&&model.local){const s=section(root,'Bozza da verificare');s.append(button('Controlla le due pagine','eye',()=>showPreview(row,s)));}
-  if(row.kind==='job'){root.append(node('p','Copia archiviata del '+(row.captured_at?new Date(row.captured_at).toLocaleDateString('it-IT'):'periodo di raccolta')+'. Apertura attuale non verificata.','notice'));}
+  if(row.kind==='job'){
+    const observed=row.first_seen_at||row.captured_at;
+    const date=observed?new Date(observed).toLocaleString('it-IT',{dateStyle:'long',timeStyle:'short'}):'non disponibile';
+    const note=row.saved?'Prima rilevazione nei tuoi annunci salvati: '+date+'. LinkedIn non fornisce la data originale del salvataggio.':'Annuncio acquisito il '+date+'.';
+    root.append(node('p',note+' Apertura attuale non verificata.','notice'));
+  }
   else if(row.note)root.append(node('p',row.note,'notice'));
   if(row.review){
     const review=row.review;
