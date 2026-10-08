@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const enc = new TextEncoder(), dec = new TextDecoder();
 const AAD = enc.encode('career-desk-v1');
 const model = {data:null,key:null,config:null,checks:{version:2,rows:{}},view:'saved',page:0,local:false,csrf:'',token:'',save:Promise.resolve(),agentRows:[],session:0};
-const labels = {saved:'Salvati LinkedIn',agent:'Salvati da AI Job Agent',jobs:'Tutti gli annunci',companies:'Aziende e recruiter',documents:'Libreria CV',reviews:'Revisioni ATS'};
+const labels = {saved:'Salvati LinkedIn',agent:'Salvati da AI Job Agent',jobs:'Tutti gli annunci',companies:'Aziende e recruiter',documents:'Libreria CV',reviews:'Revisioni ATS',impact:'Impatto CV'};
 const statuses = {not_started:'Da analizzare',running:'Analisi in corso',awaiting_visual_review:'Verifica visiva',ready:'CV verificato',needs_correction:'Da correggere',failed:'Da riprovare',interrupted:'Da riprendere',service_paused:'API da verificare',budget_paused:'Budget raggiunto',incomplete_posting:'Testo incompleto'};
 const unb64 = text => Uint8Array.from(atob(text), c=>c.charCodeAt(0));
 function b64(bytes){let text='';for(let i=0;i<bytes.length;i+=16384)text+=String.fromCharCode(...bytes.subarray(i,i+16384));return btoa(text);}
@@ -48,6 +48,24 @@ async function persist(sync=true){
   return model.save;
 }
 function setRow(id,change){model.checks.rows[id]={checked:false,note:'',...model.checks.rows[id],...change,updatedAt:new Date().toISOString()};renderMetrics();persist();}
+function impactId(question){return 'impact:'+question.id;}
+function renderImpact(){
+  const questions=model.data.impact_questions||[],root=$('impact-questions');root.replaceChildren();
+  const answered=questions.filter(q=>(model.checks.rows[impactId(q)]?.note||'').trim()).length;
+  $('count-impact').textContent=`${answered}/${questions.length}`;
+  $('impact-progress').textContent=`${answered} risposte su ${questions.length}`;
+  let group='';
+  for(const [index,q] of questions.entries()){
+    if(q.group!==group){group=q.group;root.append(node('h2',group,'impact-group'));}
+    const item=node('div',undefined,'impact-item'),label=node('label',`${index+1}. ${q.text}`),area=node('textarea');
+    area.id='impact-'+q.id;label.htmlFor=area.id;area.value=model.checks.rows[impactId(q)]?.note||'';
+    area.rows=3;area.maxLength=8000;area.placeholder='Risposta, dato iniziale e finale, periodo, fonte di verifica';
+    const save=button('Salva risposta','save',()=>{setRow(impactId(q),{checked:false,note:area.value});renderImpactProgress();toast('Risposta salvata sul dispositivo');},'primary');
+    item.append(label,area,save);root.append(item);
+  }
+  icons();
+}
+function renderImpactProgress(){const questions=model.data.impact_questions||[];const answered=questions.filter(q=>(model.checks.rows[impactId(q)]?.note||'').trim()).length;$('count-impact').textContent=`${answered}/${questions.length}`;$('impact-progress').textContent=`${answered} risposte su ${questions.length}`;}
 function getDoc(row){return model.data.documents.find(d=>d.id===row.cv_id);}
 function populateAreas(){const select=$('area'),current=select.value;select.replaceChildren(node('option','Tutte le aree'));select.firstChild.value='';for(const area of ['Parma','Reggio','Modena','Bologna','Milano','Piacenza','Monza','Remoto']){const o=node('option',area);o.value=area.toLowerCase();select.append(o);}select.value=current;}
 function renderMetrics(){
@@ -56,7 +74,8 @@ function renderMetrics(){
   $('count-agent').textContent=model.agentRows.length;
   const reviewed=[...d.jobs,...d.companies].filter(j=>j.review).length;$('count-reviews').textContent=reviewed;
   $('metric-total').textContent=a.complete_jobs;$('metric-cvs').textContent=d.documents.filter(x=>x.ready).length;
-  $('metric-sent').textContent=Object.values(model.checks.rows).filter(r=>r.checked).length;$('metric-review').textContent=reviewed;
+  $('metric-sent').textContent=Object.entries(model.checks.rows).filter(([id,r])=>!id.startsWith('impact:')&&r.checked).length;$('metric-review').textContent=reviewed;
+  const questions=d.impact_questions||[];$('count-impact').textContent=`${questions.filter(q=>(model.checks.rows[impactId(q)]?.note||'').trim()).length}/${questions.length}`;
   const metricLabels=document.querySelectorAll('.metrics>div>span:last-child');
   const metricText=model.view==='agent'?['pacchetti conservati','CV da verificare','candidature inviate','revisioni AI eseguite']:['annunci completi','CV verificati','candidature inviate','revisioni analizzate'];
   metricLabels.forEach((label,i)=>label.textContent=metricText[i]);
@@ -80,10 +99,14 @@ function visibleRows(){const q=$('search').value.toLocaleLowerCase('it'),area=$(
 function render(){
   renderMetrics();$('view-title').textContent=labels[model.view];
   $('agent-panel').hidden=model.view!=='agent';
+  const impact=model.view==='impact';$('impact-panel').hidden=!impact;
+  for(const selector of ['.metrics','.toolbar','.table-wrap','.pagination','#results-status','#empty'])document.querySelector(selector).hidden=impact;
   $('view-subtitle').textContent=model.view==='companies'?'Target e candidature spontanee, non vacancy confermate':model.view==='documents'?'Word e PDF approvati, organizzati per destinazione':'Annunci archiviati: verifica l’apertura prima della candidatura';
   if(model.view==='agent')$('view-subtitle').textContent='Pacchetti conservati tramite Mi interessa: accesso privato e verifica prima dell\'invio';
+  if(impact)$('view-subtitle').textContent='Dati verificabili per riscrivere i CV con risultati concreti';
   $('updated').textContent='Aggiornato '+new Date(model.data.updated_at).toLocaleDateString('it-IT');
   document.querySelectorAll('[data-view]').forEach(b=>{b.classList.toggle('active',b.dataset.view===model.view);b.setAttribute('aria-current',b.dataset.view===model.view?'page':'false');});
+  if(impact){renderImpact();return;}
   const rows=visibleRows(),pages=Math.max(1,Math.ceil(rows.length/30));model.page=Math.min(model.page,pages-1);
   $('rows').replaceChildren();$('empty').hidden=rows.length!==0;$('results-status').textContent=rows.length+' risultati';
   for(const row of rows.slice(model.page*30,(model.page+1)*30)){
