@@ -4,7 +4,7 @@ const enc = new TextEncoder(), dec = new TextDecoder();
 const AAD = enc.encode('career-desk-v1');
 const model = {data:null,key:null,config:null,checks:{version:2,rows:{}},view:'saved',page:0,local:false,csrf:'',token:'',save:Promise.resolve(),agentRows:[],session:0};
 const labels = {saved:'Salvati LinkedIn',agent:'Salvati da AI Job Agent',jobs:'Tutti gli annunci',companies:'Aziende e recruiter',documents:'Libreria CV',reviews:'Revisioni ATS',impact:'Impatto CV'};
-const statuses = {not_started:'Da analizzare',running:'Analisi in corso',awaiting_visual_review:'Verifica visiva',ready:'CV verificato',needs_correction:'Da correggere',failed:'Da riprovare',interrupted:'Da riprendere',service_paused:'API da verificare',budget_paused:'Budget raggiunto',incomplete_posting:'Testo incompleto'};
+const statuses = {not_started:'Da analizzare',running:'Analisi in corso',awaiting_visual_review:'Verifica visiva',ready:'CV verificato',needs_correction:'Da correggere',needs_attention:'Da verificare',waiting_local_ai:'AI locale in attesa',failed:'Da riprovare',interrupted:'Da riprendere',service_paused:'AI locale da verificare',budget_paused:'Vecchio ciclo sospeso',incomplete_posting:'Testo incompleto'};
 const unb64 = text => Uint8Array.from(atob(text), c=>c.charCodeAt(0));
 function b64(bytes){let text='';for(let i=0;i<bytes.length;i+=16384)text+=String.fromCharCode(...bytes.subarray(i,i+16384));return btoa(text);}
 function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
@@ -17,7 +17,7 @@ async function fetchJSON(url,opts={}){const r=await fetch(url,{cache:'no-store',
 async function derive(password){const material=await crypto.subtle.importKey('raw',enc.encode(password),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt:unb64(model.config.salt),iterations:model.config.iterations,hash:'SHA-256'},material,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);}
 async function decrypt(value){return crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(value.iv),additionalData:AAD},model.key,unb64(value.data));}
 async function encrypt(value){const iv=crypto.getRandomValues(new Uint8Array(12));const result=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:AAD},model.key,enc.encode(JSON.stringify(value)));return{iv:b64(iv),data:b64(new Uint8Array(result))};}
-function merge(...states){const out={version:2,rows:{}};for(const state of states){for(const [id,row]of Object.entries(state?.rows||{})){if(typeof row.checked!=='boolean'||!Number.isFinite(Date.parse(row.updatedAt)))continue;if(!out.rows[id]||Date.parse(row.updatedAt)>=Date.parse(out.rows[id].updatedAt))out.rows[id]={checked:row.checked,updatedAt:row.updatedAt,note:String(row.note||'').slice(0,8000)};}}return out;}
+function merge(...states){const out={version:2,rows:{}};for(const state of states){for(const [id,row]of Object.entries(state?.rows||{})){if(typeof row.checked!=='boolean'||!Number.isFinite(Date.parse(row.updatedAt)))continue;if(!out.rows[id]||Date.parse(row.updatedAt)>=Date.parse(out.rows[id].updatedAt))out.rows[id]={checked:row.checked,updatedAt:row.updatedAt,note:String(row.note||'').slice(0,8000),stage:row.stage||'',deadline:row.deadline||'',follow_up:row.follow_up||'',cv_sha256:row.cv_sha256||''};}}return out;}
 const storageKey=()=> 'career-desk-state-'+model.config.salt;
 async function localAPI(path,body){return fetchJSON('/api/'+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-Desk-Client':'1','X-CSRF-Token':model.csrf},...(body?{body:JSON.stringify(body)}:{})});}
 async function unlock(password){
@@ -29,6 +29,7 @@ async function unlock(password){
   model.checks=merge(model.data.state,remote,local);$('password').value='';
   $('login').hidden=true;$('workspace').hidden=false;
   $('run-all').hidden=!model.local;$('publish').hidden=!model.local;
+  $('linkedin-login').hidden=!model.local;
   $('agent-mode').textContent=model.local?'Agenti locali collegati':'Agenti sul PC';
   $('agent-count').textContent=model.local?'Stato in aggiornamento':'Consultazione da web';
   if(location.hash==='#agent-saved')model.view='agent';
@@ -36,7 +37,7 @@ async function unlock(password){
   if(model.view==='agent'&&AgentSaved.available())await loadAgentCollection();
   if(model.local)refreshWorker();
 }
-async function refreshWorker(){if(!model.local||!model.data)return;try{const state=await localAPI('status');$('agent-count').textContent=state.running?'Ciclo di revisione in corso':'Nessun ciclo in esecuzione';model.running=state.running;if(model.revision!==state.revision){model.revision=state.revision;model.data=await localAPI('catalog');render();}}catch{$('agent-count').textContent='Connessione locale da verificare';}}
+async function refreshWorker(){if(!model.local||!model.data)return;try{const state=await localAPI('status');$('agent-count').textContent=state.running?'Ciclo di revisione in corso':'Nessun ciclo in esecuzione';model.running=state.running;renderSystem(state.system);if(model.revision!==state.revision){model.revision=state.revision;model.data=await localAPI('catalog');render();}}catch{$('agent-count').textContent='Connessione locale da verificare';}}
 async function persist(sync=true){
   const snapshot=structuredClone(model.checks);
   model.save=model.save.catch(()=>{}).then(async()=>{
@@ -85,12 +86,13 @@ function renderMetrics(){
     $('metric-sent').textContent=model.agentRows.filter(r=>model.checks.rows[r.id]?.checked).length;
     $('metric-review').textContent=model.agentRows.filter(r=>r.ai_reviewed).length;
   }
-  const budget=d.budget,calls=Object.values(budget?.calls||{}),used=calls.reduce((sum,c)=>sum+(c.actual_usd??c.reserved_usd),0);
-  $('budget-info').textContent=budget?`Ciclo API: fino a $${used.toFixed(2)} / $${budget.limit_usd.toFixed(2)}`:'';
-  $('budget-info').title='Stima prudente: include le riserve per chiamate senza risposta. Non e la fattura OpenAI.';
+  $('budget-info').textContent='AI locale · API a pagamento disabilitate';
+  renderSystem(d.system);
+  $('budget-info').title='Ollama sul PC, senza fallback a provider a pagamento';
 }
 function allRows(){const d=model.data;switch(model.view){case'agent':return model.agentRows;case'saved':return d.jobs.filter(j=>j.saved);case'companies':return d.companies;case'documents':return d.documents.map(doc=>({id:'cv:'+doc.id,cv_id:doc.id,name:doc.folder,role:doc.group,kind:'document',cv_ready:doc.ready}));case'reviews':return [...d.companies.filter(c=>c.review),...d.jobs.filter(j=>j.complete)];default:return d.jobs;}}
-function visibleRows(){const q=$('search').value.toLocaleLowerCase('it'),area=$('area').value,status=$('status').value;return allRows().filter(r=>{
+function visibleRows(){const q=$('search').value.toLocaleLowerCase('it'),area=$('area').value,status=$('status').value,distance=$('distance').value;return allRows().filter(r=>{
+  if(distance){const km=r.distance_from_parma_km,verified=r.location_verification==='verified'&&Number.isFinite(km);if(distance==='unknown'?verified:!verified||km>Number(distance))return false;}
   if(q&&!`${r.company||r.name} ${r.title||r.role} ${r.location||r.place} ${r.activity||''} ${r.description||''}`.toLocaleLowerCase('it').includes(q))return false;
   if(area&&!`${r.location||r.place||''} ${r.g||''}`.toLowerCase().includes(area))return false;
   const checked=!!model.checks.rows[r.id]?.checked;
@@ -132,6 +134,22 @@ function render(){
   $('previous').disabled=model.page===0;$('next').disabled=model.page>=pages-1;$('page-count').textContent=`${model.page+1} / ${pages}`;icons();
 }
 function section(parent,title){const s=node('section',undefined,'detail-section');s.append(node('h3',title));parent.append(s);return s;}
+function renderSystem(system){
+  const el=$('system-health');if(!el)return;
+  const q=system?.queue?.counts||{},sync=system?.linkedin||{};
+  const date=system?.updated_at?new Date(system.updated_at).toLocaleString('it-IT'):'non disponibile';
+  el.textContent=`In coda: ${q.queued||0} · Da verificare: ${q.needs_attention||0} · LinkedIn: ${sync.status||'non verificato'} · Ultimo stato PC: ${date}`;
+}
+function applicationFields(parent,row,doc){
+  const state=model.checks.rows[row.id]||{},s=section(parent,'Candidatura');
+  const stages={planned:'Da valutare',interested:'Mi interessa',applied:'Inviata',interview:'Colloquio',offer:'Offerta',rejected:'Esito negativo',withdrawn:'Ritirata'};
+  const label=node('label','Fase'),select=node('select');select.setAttribute('aria-label','Fase candidatura');
+  for(const [value,text]of Object.entries(stages)){const option=node('option',text);option.value=value;select.append(option);}
+  select.value=state.stage||(state.checked?'applied':'planned');label.append(select);s.append(label);
+  select.onchange=()=>setRow(row.id,{stage:select.value,...(['applied','interview','offer','rejected'].includes(select.value)?{checked:true,cv_sha256:doc?.files?.pdf?.sha256||state.cv_sha256||''}:{})});
+  for(const [key,text]of [['deadline','Scadenza'],['follow_up','Follow-up']]){const l=node('label',text),input=node('input');input.type='date';input.value=state[key]||'';input.setAttribute('aria-label',text);input.onchange=()=>setRow(row.id,{[key]:input.value});l.append(input);s.append(l);}
+  if(state.cv_sha256)s.append(node('p','Versione CV registrata: '+state.cv_sha256.slice(0,12),'muted'));
+}
 function showDetail(row){
   $('detail-company').textContent=row.company||row.name;$('detail-title').textContent=row.title||row.role;$('detail-location').textContent=row.location||row.place||'';
   const root=$('detail-content');root.replaceChildren();const actions=node('div',undefined,'actions');
@@ -148,6 +166,7 @@ function showDetail(row){
   if(row.company_website)actions.append(safeLink(row.company_website,'Sito aziendale'));
   else if(row.kind==='job')actions.append(node('span','Sito aziendale da verificare','muted'));
   if(row.kind==='job'&&row.complete&&model.local)actions.append(button('Revisiona CV','scan-text',()=>runReviews([row.job_id])));
+  if(row.kind==='job'&&row.complete&&!model.local)actions.append(button(row.cv_ready?'CV pronto':'Prepara CV','scan-text',async()=>{if(row.cv_ready)return;try{await AgentSaved.queueCV(row.job_id);toast('Richiesta inviata al worker del PC.');}catch(e){toast(e.message);}},row.cv_ready?'ready':''));
   root.append(actions);
   if(row.draft&&model.local){const s=section(root,'Bozza da verificare');s.append(button('Controlla le due pagine','eye',()=>showPreview(row,s)));}
   if(row.kind==='job'){
@@ -172,6 +191,7 @@ function showDetail(row){
   }
   if(row.description){const s=section(root,row.complete?'Testo dell’annuncio':'Testo parziale disponibile');s.append(node('div',row.description,'posting'));}
   if(row.status&&row.kind==='company')section(root,'Stato del target').append(node('p',row.status));
+  if(row.kind!=='document')applicationFields(root,row,doc);
   if(row.kind!=='document'){const s=section(root,'Note personali');const area=node('textarea');area.value=model.checks.rows[row.id]?.note||'';area.setAttribute('aria-label','Note personali');s.append(area);s.append(button('Salva note','save',()=>{setRow(row.id,{note:area.value});toast('Note salvate');}));}
   $('detail').showModal();icons();
 }
@@ -213,11 +233,11 @@ async function githubSync(){
     localStorage.setItem(storageKey(),JSON.stringify(encrypted));render();$('sync-status').textContent='Sincronizzato con GitHub';return;
   }throw new Error('Conflitto di sincronizzazione: riprova');
 }
-async function runReviews(ids=[]){if(!model.local)return;const text=ids.length?'Avviare la revisione di questo annuncio?':'Avviare le revisioni mancanti di tutti gli annunci completi?';if(!confirm(text+' Il ciclo usa il budget autorizzato residuo, massimo 3 USD complessivi. Non invia candidature.'))return;try{const r=await localAPI('review',{ids});toast(r.message);}catch(e){toast(e.message);}}
+async function runReviews(ids=[]){if(!model.local)return;const text=ids.length?'Accodare la revisione di questo annuncio?':'Accodare le revisioni mancanti di tutti gli annunci completi?';if(!confirm(text+' AI locale: nessuna API a pagamento. Pubblicazione su Drive solo dopo tutti i controlli. Non invia candidature.'))return;try{const r=await localAPI('review',{ids});toast(r.message);}catch(e){toast(e.message);}}
 $('unlock-form').addEventListener('submit',async e=>{e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;$('login-error').textContent='';try{await unlock($('password').value);}catch{$('login-error').textContent='Accesso non riuscito. Controlla password e connessione.';model.key=null;}finally{b.disabled=false;}});
 document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{model.view=b.dataset.view;model.page=0;render();if(model.view==='agent'&&AgentSaved.available())loadAgentCollection();}));
 $('agent-connect').onclick=()=>{const value=$('agent-token').value.trim();$('agent-token').value='';loadAgentCollection(value||undefined);};
-for(const id of ['search','area','status'])$(id).addEventListener(id==='search'?'input':'change',()=>{model.page=0;render();});
+for(const id of ['search','area','status','distance'])$(id).addEventListener(id==='search'?'input':'change',()=>{model.page=0;render();});
 $('previous').onclick=()=>{model.page--;render();};$('next').onclick=()=>{model.page++;render();};
 document.querySelectorAll('dialog .close').forEach(b=>b.onclick=()=>b.closest('dialog').close());
 $('settings').onclick=()=>{$('sync-dialog').showModal();};
@@ -227,5 +247,6 @@ $('import-state').onchange=async e=>{try{const file=e.target.files[0];if(!file)r
 $('lock').onclick=()=>{model.session++;AgentSaved.lock();model.agentRows=[];$('agent-token').value='';$('agent-message').textContent='';$('count-agent').textContent='0';model.data=null;model.key=null;model.token='';model.checks={version:2,rows:{}};$('workspace').hidden=true;$('rows').replaceChildren();$('detail-content').replaceChildren();document.querySelectorAll('dialog').forEach(d=>d.close());$('login').hidden=false;};
 $('refresh').onclick=async()=>{if(model.view==='agent'){await loadAgentCollection();return;}try{if(model.local)model.data=await localAPI('catalog');else{model.data=JSON.parse(dec.decode(await decrypt(await fetchJSON('catalog.enc'))));const shared=JSON.parse(dec.decode(await decrypt(await fetchJSON('state.enc'))));model.checks=merge(model.data.state,shared,model.checks);}render();toast('Dashboard aggiornata');}catch(e){toast(e.message);}};
 $('run-all').onclick=()=>runReviews();$('publish').onclick=async()=>{try{toast('Pubblicazione in corso…');const result=await localAPI('publish',{});toast(result.message);}catch(e){toast(e.message);}};
+$('linkedin-login').onclick=async()=>{try{const result=await localAPI('linkedin-login',{});toast(result.message);}catch(e){toast(e.message);}};
 (async()=>{icons();try{if(location.hostname==='127.0.0.1'||location.hostname==='localhost'){const runtime=await localAPI('runtime');model.local=runtime.local;model.csrf=runtime.csrf;if(runtime.password){await unlock(runtime.password);return;}}}catch(e){console.warn('Local dashboard access failed:',e.name,e.message);$('login-error').textContent='Accesso locale non riuscito: '+e.message;}const params=new URLSearchParams(location.hash.slice(1));const password=params.get('key');if(password){history.replaceState(null,'',location.pathname+location.search);try{await unlock(password);}catch{$('login-error').textContent='Accesso automatico non riuscito.';}}})();
 setInterval(refreshWorker,10000);

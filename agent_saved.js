@@ -52,5 +52,12 @@ window.AgentSaved = (() => {
     if(hash!==record.sha256)throw new Error('Documento aggiornato: ricarica la raccolta');
     return data;
   }
-  return {load,file,lock(){token='';},available(){return local()||!!token;}};
+  async function queueCV(job_id){
+    if(!token)throw new Error('Collega il repository privato con un token Actions: write per accodare dal telefono.');
+    const response=await fetch('https://api.github.com/repos/'+repository+'/actions/workflows/generate-application.yml/dispatches',{
+      method:'POST',headers:{Accept:'application/vnd.github+json',Authorization:'Bearer '+token,'Content-Type':'application/json'},
+      body:JSON.stringify({ref:'main',inputs:{job_id:String(job_id)}})});
+    if(!response.ok)throw new Error('Richiesta non accodata: verifica il permesso Actions: write sul repository privato.');
+  }
+  return {load,file,queueCV,lock(){token='';},available(){return local()||!!token;}};
 })();
