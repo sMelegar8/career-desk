@@ -4,15 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self' https://api.github.com; object-src 'none'; base-uri 'none'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' https://api.github.com; frame-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'">
   <meta name="theme-color" content="#174b40">
   <title>Career Desk</title>
   <link rel="icon" href="icon.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="style.css?v=11814851430d4822">
+  <link rel="stylesheet" href="style.css?v=2227268c637d454b">
   <script src="lucide.min.js?v=3411692820cb8d47" defer></script>
   <script src="agent_saved.js?v=a3e8608ff5ce819c" defer></script>
-  <script src="app.js?v=88a99f08c5f1e2c1" defer></script>
+  <script src="app.js?v=f38ca83dfddadd81" defer></script>
 </head>
 <body>
   <section id="login" class="access">
@@ -31,6 +31,8 @@
       <aside class="navigation"><div class="nav-label">CANDIDATURE</div><nav aria-label="Viste">
         <button data-view="saved" class="active"><i data-lucide="bookmark"></i> Salvati LinkedIn <span id="count-saved"></span></button>
         <button data-view="agent"><i data-lucide="sparkles"></i> Salvati da AI Job Agent <span id="count-agent">0</span></button>
+        <button data-view="tracker"><i data-lucide="list-checks"></i> Tracker candidature <span id="count-tracker">0</span></button>
+        <button data-view="newsletter"><i data-lucide="newspaper"></i> Newsletter / Brief</button>
         <button data-view="jobs"><i data-lucide="briefcase-business"></i> Tutti gli annunci <span id="count-jobs"></span></button>
         <button data-view="companies"><i data-lucide="building-2"></i> Aziende e recruiter <span id="count-companies"></span></button>
         <button data-view="documents"><i data-lucide="files"></i> Libreria CV <span id="count-documents"></span></button>
@@ -39,9 +41,39 @@
       </nav><div class="agent-state"><span class="dot"></span><strong id="agent-mode">Agenti sul PC</strong><span id="agent-count"></span><p id="budget-info" class="muted"></p><button id="linkedin-login" class="secondary" hidden><i data-lucide="log-in"></i> Ricollega LinkedIn</button><button id="run-all" class="secondary" hidden><i data-lucide="play"></i> Avvia revisioni</button><button id="publish" class="secondary" hidden><i data-lucide="cloud-upload"></i> Aggiorna web app</button></div></aside>
       <main><div class="page-heading"><div><h1 id="view-title">Salvati LinkedIn</h1><p id="view-subtitle"></p></div><span id="updated" class="muted"></span></div>
         <div class="metrics"><div><span id="metric-total">0</span><span>annunci completi</span></div><div><span id="metric-cvs">0</span><span>CV verificati</span></div><div><span id="metric-sent">0</span><span>candidature inviate</span></div><div><span id="metric-review">0</span><span>revisioni analizzate</span></div></div>
-        <div class="toolbar"><label class="search"><i data-lucide="search"></i><input id="search" type="search" placeholder="Cerca azienda, ruolo, competenza" aria-label="Cerca"></label><select id="area" aria-label="Area"><option value="">Tutte le aree</option></select><select id="distance" aria-label="Distanza da Parma"><option value="">Qualsiasi distanza</option><option value="30">Entro 30 km</option><option value="100">Entro 100 km</option><option value="200">Entro 200 km</option><option value="300">Entro 300 km</option><option value="unknown">Distanza da verificare</option></select><select id="status" aria-label="Stato"><option value="">Tutti gli stati</option><option value="unsent">Non inviati</option><option value="sent">Inviati</option><option value="ready">CV pronto</option><option value="complete">Annuncio completo</option><option value="incomplete">Testo da integrare</option></select></div>
+        <div class="toolbar"><label class="search"><i data-lucide="search"></i><input id="search" type="search" placeholder="Cerca azienda, ruolo, competenza" aria-label="Cerca"></label><select id="area" aria-label="Area"><option value="">Tutte le aree</option></select><select id="distance" aria-label="Distanza da Parma"><option value="">Qualsiasi distanza</option><option value="30">Entro 30 km</option><option value="100">Entro 100 km</option><option value="200">Entro 200 km</option><option value="300">Entro 300 km</option><option value="unknown">Distanza da verificare</option></select><select id="status" aria-label="Stato"><option value="">Tutti gli stati</option><option value="unsent">Non inviati</option><option value="sent">Inviati</option><option value="ready">CV pronto</option><option value="complete">Annuncio completo</option><option value="incomplete">Testo da integrare</option></select><select id="tracker-stage" aria-label="Fase nel tracker" hidden><option value="">Tutte le candidature</option><option value="sent">Già inviate</option></select></div>
         <div id="agent-panel" class="notice" hidden><p>Documenti nel repository privato. Il CV resta una bozza tailored da verificare prima dell'invio. Dal PC viene usato l'accesso GitHub locale; dal telefono serve un token limitato ad Auto-LinkdIn-v2.0 con permesso Contents: read e, per accodare CV, Actions: write, conservato solo in memoria fino al blocco o alla chiusura.</p><label for="agent-token">Accesso alla raccolta privata</label><input type="password" id="agent-token" autocomplete="off"><button id="agent-connect" class="primary">Collega / aggiorna raccolta</button><p id="agent-message" role="status"></p></div>
         <section id="impact-panel" hidden><p id="impact-progress" class="impact-progress" aria-live="polite"></p><div id="impact-questions"></div></section>
+        <section id="newsletter-panel" hidden aria-label="Editor Newsletter e Brief">
+          <p id="newsletter-mode" class="notice"></p>
+          <p id="newsletter-status" role="status" aria-live="polite"></p>
+          <p id="newsletter-error" class="form-error" role="alert"></p>
+          <form id="newsletter-form" hidden>
+            <fieldset id="newsletter-fields" disabled>
+              <legend>Sezioni del brief</legend>
+              <div id="newsletter-sections" class="newsletter-sections"></div>
+              <div class="newsletter-options">
+                <label for="newsletter-grouping">Raggruppamento<select id="newsletter-grouping"><option value="area_then_distance">Area, poi distanza</option><option value="distance_then_area">Distanza, poi area</option></select></label>
+                <label for="newsletter-max_jobs">Annunci totali<input id="newsletter-max_jobs" type="number" min="1" max="100" step="1" required></label>
+                <label for="newsletter-max_per_section">Annunci per sezione<input id="newsletter-max_per_section" type="number" min="1" max="50" step="1" required></label>
+                <label for="newsletter-min_score">Punteggio minimo /100<input id="newsletter-min_score" type="number" min="0" max="100" step="1" required></label>
+              </div>
+              <div class="newsletter-toggles">
+                <label><input id="newsletter-include_bridge" type="checkbox"> Includi ruoli ponte</label>
+                <label><input id="newsletter-show_summary" type="checkbox"> Riepilogo generale</label>
+                <label><input id="newsletter-show_distance_summary" type="checkbox"> Riepilogo distanze</label>
+                <label><input id="newsletter-show_strengths" type="checkbox"> Punti di forza</label>
+                <label><input id="newsletter-show_gaps" type="checkbox"> Gap documentati</label>
+              </div>
+            </fieldset>
+            <div class="actions newsletter-actions">
+              <button id="newsletter-save" type="submit" class="primary" disabled><i data-lucide="save"></i> Salva configurazione</button>
+              <button id="newsletter-reload" type="button"><i data-lucide="refresh-cw"></i> Rileggi configurazione</button>
+            </div>
+          </form>
+          <div class="newsletter-preview-actions"><button id="newsletter-preview" type="button"><i data-lucide="eye"></i> Anteprima salvata</button><span id="newsletter-preview-status" class="muted" role="status"></span></div>
+          <iframe id="newsletter-preview-frame" title="Anteprima newsletter salvata, nessun invio" sandbox="" referrerpolicy="no-referrer" hidden></iframe>
+        </section>
         <p id="system-health" class="muted" role="status"></p>
         <div id="results-status" class="result-label" aria-live="polite"></div>
         <div class="table-wrap"><table><thead><tr><th class="check-cell"><span class="sr-only">Inviato</span></th><th>Azienda / ruolo</th><th class="location-cell">Sede</th><th>Documenti</th><th>Revisione</th><th class="open-cell"><span class="sr-only">Apri</span></th></tr></thead><tbody id="rows"></tbody></table></div>
