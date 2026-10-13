@@ -4,7 +4,7 @@ const enc = new TextEncoder(), dec = new TextDecoder();
 const AAD = enc.encode('career-desk-v1');
 const model = {data:null,key:null,config:null,checks:{version:2,rows:{}},view:'saved',page:0,local:false,csrf:'',token:'',save:Promise.resolve(),agentRows:[],session:0};
 const labels = {saved:'Salvati LinkedIn',agent:'Salvati da AI Job Agent',jobs:'Tutti gli annunci',companies:'Aziende e recruiter',documents:'Libreria CV',reviews:'Revisioni ATS',impact:'Impatto CV'};
-const statuses = {not_started:'Da analizzare',running:'Analisi in corso',awaiting_visual_review:'Verifica visiva',ready:'CV verificato',needs_correction:'Da correggere',needs_attention:'Da verificare',waiting_local_ai:'AI locale in attesa',failed:'Da riprovare',interrupted:'Da riprendere',service_paused:'AI locale da verificare',budget_paused:'Vecchio ciclo sospeso',incomplete_posting:'Testo incompleto'};
+const statuses = {not_started:'Da analizzare',running:'Analisi in corso',awaiting_visual_review:'Verifica visiva',ready:'CV verificato',needs_correction:'Da correggere',needs_attention:'Da verificare',waiting_local_ai:'AI locale in attesa',waiting_local_resources:'In attesa di memoria',resource_deferred:'In attesa di memoria',failed:'Da riprovare',interrupted:'Da riprendere',service_paused:'AI locale da verificare',budget_paused:'Vecchio ciclo sospeso',incomplete_posting:'Testo incompleto'};
 const unb64 = text => Uint8Array.from(atob(text), c=>c.charCodeAt(0));
 function b64(bytes){let text='';for(let i=0;i<bytes.length;i+=16384)text+=String.fromCharCode(...bytes.subarray(i,i+16384));return btoa(text);}
 function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
@@ -103,7 +103,7 @@ function render(){
   $('agent-panel').hidden=model.view!=='agent';
   const impact=model.view==='impact';$('impact-panel').hidden=!impact;
   for(const selector of ['.metrics','.toolbar','.table-wrap','.pagination','#results-status','#empty'])document.querySelector(selector).hidden=impact;
-  $('view-subtitle').textContent=model.view==='companies'?'Target e candidature spontanee, non vacancy confermate':model.view==='documents'?'Word e PDF approvati, organizzati per destinazione':'Annunci archiviati: verifica l’apertura prima della candidatura';
+  $('view-subtitle').textContent=model.view==='companies'?'Target e candidature spontanee, non vacancy confermate':model.view==='documents'?'CV disponibili e revisioni in corso':'Annunci archiviati: verifica l’apertura prima della candidatura';
   if(model.view==='agent')$('view-subtitle').textContent='Pacchetti conservati tramite Mi interessa: accesso privato e verifica prima dell\'invio';
   if(impact)$('view-subtitle').textContent='Dati verificabili per riscrivere i CV con risultati concreti';
   $('updated').textContent='Aggiornato '+new Date(model.data.updated_at).toLocaleDateString('it-IT');
@@ -123,7 +123,7 @@ function render(){
     const place=node('td',row.location||row.place||'—','location-cell');
     const files=node('td'),actions=node('div',undefined,'file-actions'),doc=getDoc(row);
     if(row.kind==='agent'){for(const kind of ['cv','posting','company'])if(row.files[kind])actions.append(button(row.files[kind].label,'download',()=>downloadAgent(row,kind)));}
-    else if(doc){for(const fmt of ['pdf','docx'])if(doc.files[fmt])actions.append(button(fmt==='pdf'?'PDF':'Word',fmt==='pdf'?'file-text':'file-pen-line',()=>download(doc.files[fmt],doc.id,fmt),doc.ready?'ready':''));}
+    else if(doc){if(doc.pending_revision)actions.append(node('span','Revisione da verificare','muted'));for(const fmt of ['pdf','docx'])if(doc.files[fmt])actions.append(button(fmt==='pdf'?'PDF':'Word',fmt==='pdf'?'file-text':'file-pen-line',()=>download(doc.files[fmt],doc.id,fmt),doc.ready?'ready':''));}
     else actions.append(node('span',row.complete?'CV da preparare':'CV non disponibile','muted'));
     files.append(actions);const progress=node('td');
     if(row.kind==='job')progress.append(node('span',statuses[row.review_status]||row.review_status,'badge '+(row.review_status==='ready'?'ready':row.review?'review':!row.complete?'warn':'')));
