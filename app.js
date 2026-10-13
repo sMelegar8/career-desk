@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const enc = new TextEncoder(), dec = new TextDecoder();
 const AAD = enc.encode('career-desk-v1');
 const model = {data:null,key:null,config:null,checks:{version:2,rows:{}},view:'saved',page:0,local:false,csrf:'',token:'',save:Promise.resolve(),agentRows:[],session:0,newsletter:{draft:null,revision:'',loaded:false,dirty:false}};
-const labels = {saved:'Salvati LinkedIn',agent:'Salvati da AI Job Agent',tracker:'Tracker candidature',newsletter:'Newsletter / Brief',jobs:'Tutti gli annunci',companies:'Aziende e recruiter',documents:'Libreria CV',reviews:'Revisioni ATS',impact:'Impatto CV'};
+const labels = {saved:'Salvati LinkedIn',agent:'Salvati da AI Job Agent',tracker:'Tracker candidature',newsletter:'Newsletter / Brief',jobs:'Tutti gli annunci',companies:'Aziende e recruiter',documents:'Libreria CV',reviews:'Revisioni ATS','linkedin-profile':'Profilo LinkedIn',impact:'Impatto CV'};
 const stages = {planned:'Da valutare',interested:'Mi interessa',applied:'Inviata',interview:'Colloquio',offer:'Offerta',rejected:'Esito negativo',withdrawn:'Ritirata'};
 const applicationStages = ['applied','interview','offer','rejected','withdrawn'];
 const newsletterAreas = ['R&D','Project Management','Software Development','Chimica e laboratorio','Data Analysis e Data Engineering','AI e LLM','Qualita e Compliance','Altre opportunita'];
@@ -82,7 +82,6 @@ async function unlock(password){
   $('linkedin-login').hidden=!model.local;
   $('agent-mode').textContent=model.local?'Agenti locali collegati':'Agenti sul PC';
   $('agent-count').textContent=model.local?'Stato in aggiornamento':'Consultazione da web';
-  if(location.hash==='#agent-saved')model.view='agent';
   populateAreas();render();await persist(false);
   if(['agent','tracker'].includes(model.view)&&AgentSaved.available())await loadAgentCollection();
   if(model.view==='newsletter'&&model.local)await loadNewsletterConfig();
@@ -118,6 +117,67 @@ function renderImpact(){
   icons();
 }
 function renderImpactProgress(){const questions=model.data.impact_questions||[];const answered=questions.filter(q=>(model.checks.rows[impactId(q)]?.note||'').trim()).length;$('count-impact').textContent=`${answered}/${questions.length}`;$('impact-progress').textContent=`${answered} risposte su ${questions.length}`;}
+function renderLinkedInProfile(){
+  const root=$('linkedin-profile-panel'),review=model.data.linkedin_profile_review;root.replaceChildren();
+  if(!review){root.append(node('p','Nessuna revisione del profilo LinkedIn disponibile.','linkedin-empty'));return;}
+  const addSection=title=>{const s=node('section',undefined,'linkedin-section');s.append(node('h2',title));root.append(s);return s;};
+  const fields=(parent,values)=>{
+    const dl=node('dl',undefined,'linkedin-fields');
+    for(const [label,text]of values)if(text!==undefined&&text!==null&&text!=='')dl.append(node('dt',label),node('dd',text));
+    parent.append(dl);
+  };
+  const list=(title,values)=>{const s=addSection(title),ul=node('ul',undefined,'linkedin-list');for(const text of values||[])ul.append(node('li',text));s.append(ul);};
+  const summary=addSection(review.title||'Revisione del profilo');
+  summary.append(node('p',`Revisione ${review.reviewed_at||''} · Versione ${review.version}`,'muted'));
+  if(review.profile_url){const link=safeLink(review.profile_url,review.profile_url);link.className='linkedin-link';summary.append(link);}
+  fields(summary,[['Valutazione',review.verdict],['Posizionamento',review.positioning]]);
+  list('Punti di forza',review.strengths);
+  const findings=addSection('Criticita e priorita');
+  for(const finding of review.findings||[]){
+    const item=node('article',undefined,'linkedin-item'),heading=node('div',undefined,'linkedin-item-heading');
+    const priority=node('span','Priorita '+finding.priority,'badge '+(finding.priority==='Alta'?'linkedin-high':'linkedin-medium'));
+    heading.append(node('h3',finding.section),priority);item.append(heading);
+    if(finding.quote)item.append(node('blockquote',finding.quote));
+    fields(item,[['Diagnosi',finding.diagnosis],['Rischio',finding.risk],['Azione',finding.action],['Evidenza',finding.evidence]]);
+    findings.append(item);
+  }
+  const rewrites=addSection('Riscritture');
+  for(const rewrite of review.rewrites||[]){
+    const item=node('article',undefined,'linkedin-item'),heading=node('div',undefined,'linkedin-item-heading');
+    const text=node('p',rewrite.text,'linkedin-rewrite');if(rewrite.language)text.lang=rewrite.language;
+    const copy=button('', 'copy',async()=>{
+      copy.disabled=true;
+      try{await navigator.clipboard.writeText(rewrite.text);toast('Testo copiato');}
+      catch{toast('Copia non riuscita. Seleziona il testo e copialo manualmente.');}
+      finally{copy.disabled=false;}
+    },'icon');
+    copy.title='Copia '+rewrite.label;copy.setAttribute('aria-label',copy.title);
+    heading.append(node('h3',rewrite.label),copy);item.append(heading,node('p',rewrite.language||'','muted'),text);
+    if(rewrite.note)item.append(node('p',rewrite.note,'linkedin-note'));rewrites.append(item);
+  }
+  const standout=addSection('Elementi distintivi');
+  for(const entry of review.standout||[]){
+    const item=node('article',undefined,'linkedin-item');item.append(node('h3',entry.title));
+    fields(item,[['Problema',entry.problem],['Prova',entry.proof],['Deliverable',entry.deliverable],['Salvaguardia',entry.safeguard]]);standout.append(item);
+  }
+  const plan=addSection('Piano di intervento'),progress=node('p',undefined,'muted'),planRows=review.plan||[];
+  progress.setAttribute('aria-live','polite');plan.append(progress);
+  const updateProgress=()=>{progress.textContent=`${planRows.filter(step=>model.checks.rows['impact:linkedin:'+step.id]?.checked).length} di ${planRows.length} interventi completati`;};
+  for(const step of planRows){
+    const item=node('div',undefined,'linkedin-plan-item'),label=node('label',undefined,'check-label'),check=node('input'),body=node('div');
+    check.type='checkbox';check.checked=!!model.checks.rows['impact:linkedin:'+step.id]?.checked;
+    check.onchange=()=>{setRow('impact:linkedin:'+step.id,{checked:check.checked});updateProgress();};
+    label.append(check,node('span',step.title));body.append(label,node('p',step.phase||'','muted'),node('p',step.detail));item.append(body);plan.append(item);
+  }
+  updateProgress();list('Domande aperte',review.questions);
+  list('Copertura della revisione',review.coverage);
+  const sources=addSection('Fonti'),sourceList=node('ul',undefined,'linkedin-list');
+  for(const source of review.sources||[]){
+    const item=node('li'),link=safeLink(source.url,source.title);link.className='linkedin-link';
+    item.append(link,node('p',source.url,'muted'));sourceList.append(item);
+  }
+  sources.append(sourceList);icons();
+}
 function getDoc(row){return model.data.documents.find(d=>d.id===row.cv_id);}
 function populateAreas(){const select=$('area'),current=select.value;select.replaceChildren(node('option','Tutte le aree'));select.firstChild.value='';for(const area of ['Parma','Reggio','Modena','Bologna','Milano','Piacenza','Monza','Remoto']){const o=node('option',area);o.value=area.toLowerCase();select.append(o);}select.value=current;}
 function renderMetrics(){
@@ -155,8 +215,8 @@ function visibleRows(){const q=$('search').value.toLocaleLowerCase('it'),area=$(
 function render(){
   renderMetrics();$('view-title').textContent=labels[model.view];
   $('agent-panel').hidden=model.view!=='agent';
-  const impact=model.view==='impact',newsletter=model.view==='newsletter',tracker=model.view==='tracker';$('impact-panel').hidden=!impact;$('newsletter-panel').hidden=!newsletter;
-  for(const selector of ['.metrics','.toolbar','.table-wrap','.pagination','#results-status','#empty'])document.querySelector(selector).hidden=impact||newsletter;
+  const impact=model.view==='impact',newsletter=model.view==='newsletter',tracker=model.view==='tracker',linkedin=model.view==='linkedin-profile';$('impact-panel').hidden=!impact;$('newsletter-panel').hidden=!newsletter;$('linkedin-profile-panel').hidden=!linkedin;
+  for(const selector of ['.metrics','.toolbar','.table-wrap','.pagination','#results-status','#empty'])document.querySelector(selector).hidden=impact||newsletter||linkedin;
   $('status').hidden=tracker;$('tracker-stage').hidden=!tracker;
   document.querySelector('table').classList.toggle('tracker-table',tracker);
   const headings=document.querySelectorAll('thead th');headings[2].textContent=tracker?'Stato': 'Sede';headings[3].textContent=tracker?'Invio / Follow-up':'Documenti';headings[4].textContent=tracker?'Canale / CV / Esito':'Revisione';
@@ -165,10 +225,12 @@ function render(){
   if(impact)$('view-subtitle').textContent='Dati verificabili per riscrivere i CV con risultati concreti';
   if(tracker)$('view-subtitle').textContent='Registro manuale delle candidature. Nessun invio dalla dashboard.';
   if(newsletter)$('view-subtitle').textContent=model.local?'Configurazione del prossimo ciclo; nessuna email inviata al salvataggio.':'Configurazione esportata dal PC: sola lettura.';
+  if(linkedin)$('view-subtitle').textContent='';
   $('updated').textContent='Aggiornato '+new Date(model.data.updated_at).toLocaleDateString('it-IT');
   document.querySelectorAll('[data-view]').forEach(b=>{b.classList.toggle('active',b.dataset.view===model.view);b.setAttribute('aria-current',b.dataset.view===model.view?'page':'false');});
   if(impact){renderImpact();return;}
   if(newsletter){renderNewsletter();return;}
+  if(linkedin){renderLinkedInProfile();return;}
   const rows=visibleRows(),pages=Math.max(1,Math.ceil(rows.length/30));model.page=Math.min(model.page,pages-1);
   $('rows').replaceChildren();$('empty').hidden=rows.length!==0;$('results-status').textContent=rows.length+' risultati';
   for(const row of rows.slice(model.page*30,(model.page+1)*30)){
@@ -429,7 +491,10 @@ async function githubSync(){
 }
 async function runReviews(ids=[]){if(!model.local)return;const text=ids.length?'Accodare la revisione di questo annuncio?':'Accodare le revisioni mancanti di tutti gli annunci completi?';if(!confirm(text+' AI locale: nessuna API a pagamento. Pubblicazione su Drive solo dopo tutti i controlli. Non invia candidature.'))return;try{const r=await localAPI('review',{ids});toast(r.message);}catch(e){toast(e.message);}}
 $('unlock-form').addEventListener('submit',async e=>{e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;$('login-error').textContent='';try{await unlock($('password').value);}catch{$('login-error').textContent='Accesso non riuscito. Controlla password e connessione.';model.key=null;}finally{b.disabled=false;}});
-document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{model.view=b.dataset.view;model.page=0;render();if(['agent','tracker'].includes(model.view)&&AgentSaved.available())loadAgentCollection();if(model.view==='newsletter'&&model.local&&!model.newsletter.loaded)loadNewsletterConfig();}));
+function viewFromHash(){const view=location.hash.slice(1);return view==='agent-saved'?'agent':Object.hasOwn(labels,view)?view:null;}
+function selectView(view){if(!Object.hasOwn(labels,view))return;model.view=view;model.page=0;if(!model.data)return;render();if(['agent','tracker'].includes(model.view)&&AgentSaved.available())loadAgentCollection();if(model.view==='newsletter'&&model.local&&!model.newsletter.loaded)loadNewsletterConfig();}
+document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{history.replaceState(null,'',location.pathname+location.search+'#'+b.dataset.view);selectView(b.dataset.view);}));
+window.addEventListener('hashchange',()=>selectView(viewFromHash()));
 $('agent-connect').onclick=()=>{const value=$('agent-token').value.trim();$('agent-token').value='';loadAgentCollection(value||undefined);};
 for(const id of ['search','area','status','distance','tracker-stage'])$(id).addEventListener(id==='search'?'input':'change',()=>{model.page=0;render();});
 for(const [value,text]of Object.entries(stages)){const option=node('option',text);option.value=value;$('tracker-stage').append(option);}
@@ -443,9 +508,9 @@ $('settings').onclick=()=>{$('sync-dialog').showModal();};
 $('sync-now').onclick=async()=>{model.token=$('github-token').value.trim();$('github-token').value='';try{await githubSync();$('sync-message').textContent='Spunte e note sincronizzate.';}catch(e){$('sync-message').textContent=e.message;}};
 $('export-state').onclick=async()=>saveBlob(JSON.stringify(await encrypt(model.checks)),'Career_Desk_Spunte.enc','application/json');
 $('import-state').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;const incoming=JSON.parse(dec.decode(await decrypt(JSON.parse(await file.text()))));model.checks=merge(model.checks,incoming);await persist();render();toast('Spunte importate');}catch{toast('File non valido o cifrato con un’altra password');}e.target.value='';};
-$('lock').onclick=async()=>{await model.save;model.session++;AgentSaved.lock();model.agentRows=[];$('agent-token').value='';$('agent-message').textContent='';$('count-agent').textContent='0';model.data=null;model.key=null;model.token='';model.checks={version:2,rows:{}};model.newsletter={draft:null,revision:'',loaded:false,dirty:false};$('newsletter-form').reset();$('newsletter-sections').replaceChildren();$('newsletter-preview-frame').removeAttribute('srcdoc');$('newsletter-preview-frame').hidden=true;$('workspace').hidden=true;$('rows').replaceChildren();$('detail-content').replaceChildren();document.querySelectorAll('dialog').forEach(d=>d.close());$('login').hidden=false;};
+$('lock').onclick=async()=>{await model.save;model.session++;AgentSaved.lock();model.agentRows=[];$('agent-token').value='';$('agent-message').textContent='';$('count-agent').textContent='0';model.data=null;model.key=null;model.token='';model.checks={version:2,rows:{}};model.newsletter={draft:null,revision:'',loaded:false,dirty:false};$('newsletter-form').reset();$('newsletter-sections').replaceChildren();$('newsletter-preview-frame').removeAttribute('srcdoc');$('newsletter-preview-frame').hidden=true;$('workspace').hidden=true;$('rows').replaceChildren();$('detail-content').replaceChildren();$('linkedin-profile-panel').replaceChildren();document.querySelectorAll('dialog').forEach(d=>d.close());$('login').hidden=false;};
 $('refresh').onclick=async()=>{if(model.view==='newsletter'&&model.local){await loadNewsletterConfig();return;}if(model.view==='agent'){await loadAgentCollection();return;}try{if(model.local){model.data=await localAPI('catalog');model.checks=merge(model.data.state,model.checks);}else{model.data=JSON.parse(dec.decode(await decrypt(await fetchJSON('catalog.enc'))));const shared=JSON.parse(dec.decode(await decrypt(await fetchJSON('state.enc'))));model.checks=merge(model.data.state,shared,model.checks);model.newsletter={draft:null,revision:'',loaded:false,dirty:false};$('newsletter-sections').replaceChildren();}render();toast('Dashboard aggiornata');}catch(e){toast(e.message);}};
 $('run-all').onclick=()=>runReviews();$('publish').onclick=async()=>{try{toast('Pubblicazione in corso…');const result=await localAPI('publish',{});toast(result.message);}catch(e){toast(e.message);}};
 $('linkedin-login').onclick=async()=>{try{const result=await localAPI('linkedin-login',{});toast(result.message);}catch(e){toast(e.message);}};
-(async()=>{icons();try{if(location.hostname==='127.0.0.1'||location.hostname==='localhost'){const runtime=await localAPI('runtime');model.local=runtime.local;model.csrf=runtime.csrf;if(runtime.password){await unlock(runtime.password);return;}}}catch(e){console.warn('Local dashboard access failed:',e.name,e.message);$('login-error').textContent='Accesso locale non riuscito: '+e.message;}const params=new URLSearchParams(location.hash.slice(1));const password=params.get('key');if(password){history.replaceState(null,'',location.pathname+location.search);try{await unlock(password);}catch{$('login-error').textContent='Accesso automatico non riuscito.';}}})();
+(async()=>{model.view=viewFromHash()||model.view;icons();try{if(location.hostname==='127.0.0.1'||location.hostname==='localhost'){const runtime=await localAPI('runtime');model.local=runtime.local;model.csrf=runtime.csrf;if(runtime.password){await unlock(runtime.password);return;}}}catch(e){console.warn('Local dashboard access failed:',e.name,e.message);$('login-error').textContent='Accesso locale non riuscito: '+e.message;}const params=new URLSearchParams(location.hash.slice(1));const password=params.get('key');if(password){history.replaceState(null,'',location.pathname+location.search);try{await unlock(password);}catch{$('login-error').textContent='Accesso automatico non riuscito.';}}})();
 setInterval(refreshWorker,10000);
