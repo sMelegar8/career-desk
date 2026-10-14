@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="style.css?v=e42fab849464440f">
   <script src="lucide.min.js?v=3411692820cb8d47" defer></script>
   <script src="agent_saved.js?v=a3e8608ff5ce819c" defer></script>
-  <script src="app.js?v=a81502805b180e30" defer></script>
+  <script src="app.js?v=a0d1b1b5928ecaaf" defer></script>
 </head>
 <body>
   <section id="login" class="access">
@@ -33,6 +33,7 @@
         <button data-view="agent"><i data-lucide="sparkles"></i> Salvati da AI Job Agent <span id="count-agent">0</span></button>
         <button data-view="tracker"><i data-lucide="list-checks"></i> Tracker candidature <span id="count-tracker">0</span></button>
         <button data-view="newsletter"><i data-lucide="newspaper"></i> Newsletter / Brief</button>
+        <button data-view="parma-research"><i data-lucide="map-pin"></i> Parma · ottobre 2026</button>
         <button data-view="jobs"><i data-lucide="briefcase-business"></i> Tutti gli annunci <span id="count-jobs"></span></button>
         <button data-view="companies"><i data-lucide="building-2"></i> Aziende e recruiter <span id="count-companies"></span></button>
         <button data-view="documents"><i data-lucide="files"></i> Libreria CV <span id="count-documents"></span></button>
@@ -44,6 +45,7 @@
         <div class="metrics"><div><span id="metric-total">0</span><span>annunci completi</span></div><div><span id="metric-cvs">0</span><span>CV verificati</span></div><div><span id="metric-sent">0</span><span>candidature inviate</span></div><div><span id="metric-review">0</span><span>revisioni analizzate</span></div></div>
         <div class="toolbar"><label class="search"><i data-lucide="search"></i><input id="search" type="search" placeholder="Cerca azienda, ruolo, competenza" aria-label="Cerca"></label><select id="area" aria-label="Area"><option value="">Tutte le aree</option></select><select id="distance" aria-label="Distanza da Parma"><option value="">Qualsiasi distanza</option><option value="30">Entro 30 km</option><option value="100">Entro 100 km</option><option value="200">Entro 200 km</option><option value="300">Entro 300 km</option><option value="unknown">Distanza da verificare</option></select><select id="status" aria-label="Stato"><option value="">Tutti gli stati</option><option value="unsent">Non inviati</option><option value="sent">Inviati</option><option value="ready">CV pronto</option><option value="complete">Annuncio completo</option><option value="incomplete">Testo da integrare</option></select><select id="tracker-stage" aria-label="Fase nel tracker" hidden><option value="">Tutte le candidature</option><option value="sent">Già inviate</option></select></div>
         <div id="agent-panel" class="notice" hidden><p>Documenti nel repository privato. Il CV resta una bozza tailored da verificare prima dell'invio. Dal PC viene usato l'accesso GitHub locale; dal telefono serve un token limitato ad Auto-LinkdIn-v2.0 con permesso Contents: read e, per accodare CV, Actions: write, conservato solo in memoria fino al blocco o alla chiusura.</p><label for="agent-token">Accesso alla raccolta privata</label><input type="password" id="agent-token" autocomplete="off"><button id="agent-connect" class="primary">Collega / aggiorna raccolta</button><p id="agent-message" role="status"></p></div>
+        <section id="parma-research-panel" hidden aria-label="Opportunità Parma ottobre 2026"></section>
         <section id="impact-panel" hidden><p id="impact-progress" class="impact-progress" aria-live="polite"></p><div id="impact-questions"></div></section>
         <section id="linkedin-profile-panel" hidden aria-label="Revisione del profilo LinkedIn"></section>
         <section id="newsletter-panel" hidden aria-label="Editor Newsletter e Brief">
