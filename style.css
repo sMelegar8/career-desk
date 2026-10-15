@@ -20,6 +20,9 @@
 
 
 
+.score-filter{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;min-height:39px}.score-filter input{width:82px;min-height:39px}.alignment-summary{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}.alignment-summary .subline{margin:0}.alignment-score{font-variant-numeric:tabular-nums;white-space:nowrap;background:#edf2f6;color:#244b69}.toolbar #sort-order{max-width:240px}
+@media(max-width:620px){.toolbar{align-items:stretch}.toolbar select{flex:1 1 145px;max-width:100%}.toolbar .search{flex-basis:100%;min-width:0}.toolbar .score-filter{flex:1 1 145px}.toolbar #sort-order{max-width:100%}.alignment-summary{align-items:flex-start;gap:5px}}
+
 /* PROGRAM QR START */
 .program-qr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:18px;margin:18px 0}.program-qr-card{background:#fff;border:1px solid #d8e4e0;border-radius:12px;padding:18px;color:#18352e}.program-qr-card h3{margin-top:0}.program-qr-card img{display:block;max-width:100%;height:auto;margin:0 auto;image-rendering:pixelated}.program-qr-card a{color:#174b40;font-weight:600}.program-qr-card p{font-size:14px;line-height:1.5}/* PROGRAM QR END */
 

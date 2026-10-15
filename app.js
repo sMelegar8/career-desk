@@ -227,7 +227,24 @@ function renderMetrics(){
   $('budget-info').title='Ollama sul PC, senza fallback a provider a pagamento';
 }
 function allRows(){const d=model.data;switch(model.view){case'tracker':return applicationRows().filter(r=>applicationState(r).checked||applicationStages.includes(applicationStage(r)));case'agent':return model.agentRows;case'saved':return d.jobs.filter(j=>j.saved);case'companies':return d.companies;case'documents':return d.documents.map(doc=>({id:'cv:'+doc.id,cv_id:doc.id,name:doc.folder,role:doc.group,kind:'document',cv_ready:doc.ready}));case'reviews':return [...d.companies.filter(c=>c.review),...d.jobs.filter(j=>j.complete)];default:return d.jobs;}}
-function visibleRows(){const q=$('search').value.toLocaleLowerCase('it'),area=$('area').value,status=$('status').value,distance=$('distance').value;return allRows().filter(r=>{
+const fitLabels={apply_now:'Candidatura diretta',bridge:'Ruolo affine con gap',insufficient_information:'Da verificare',not_aligned:'Non allineato'};
+function alignmentScore(row){const score=row.fit?.score;return typeof score==='number'&&Number.isFinite(score)&&score>=0&&score<=100?score:null;}
+function compareRows(a,b,order){
+  const missingLast=(x,y,direction=1)=>x===null?(y===null?0:1):y===null?-1:direction*(x-y);
+  const distance=row=>row.location_verification==='verified'&&Number.isFinite(row.distance_from_parma_km)&&row.distance_from_parma_km>=0?row.distance_from_parma_km:null;
+  const observed=row=>{const time=Date.parse(row.first_seen_at||row.first_seen||row.captured_at||row.posted_at||'');return Number.isFinite(time)?time:null;};
+  let result=0;
+  if(order==='score-desc'||order==='score-asc')result=missingLast(alignmentScore(a),alignmentScore(b),order==='score-desc'?-1:1);
+  else if(order==='date-desc')result=missingLast(observed(a),observed(b),-1);
+  else if(order==='distance-asc')result=missingLast(distance(a),distance(b));
+  else if(order==='company')result=String(a.company||a.name||'').localeCompare(String(b.company||b.name||''),'it');
+  else if(order==='role')result=String(a.title||a.role||'').localeCompare(String(b.title||b.role||''),'it');
+  return result||String(a.id||'').localeCompare(String(b.id||''),'it');
+}
+function visibleRows(){const q=$('search').value.toLocaleLowerCase('it'),area=$('area').value,status=$('status').value,distance=$('distance').value,minScore=$('fit-min').value,tier=$('fit-tier').value;return allRows().filter(r=>{
+  const score=alignmentScore(r);
+  if(minScore!==''&&(score===null||score<Number(minScore)))return false;
+  if(tier&&(tier==='unscored'?score!==null:r.fit?.application_tier!==tier))return false;
   if(distance){const km=r.distance_from_parma_km,verified=r.location_verification==='verified'&&Number.isFinite(km);if(distance==='unknown'?verified:!verified||km>Number(distance))return false;}
   const state=applicationState(r);
   if(q&&!`${r.company||r.name} ${r.title||r.role} ${r.location||r.place} ${r.activity||''} ${r.description||''} ${model.view==='tracker'?[state.channel,state.cv_version,state.note,state.outcome].join(' '):''}`.toLocaleLowerCase('it').includes(q))return false;
@@ -235,7 +252,7 @@ function visibleRows(){const q=$('search').value.toLocaleLowerCase('it'),area=$(
   const checked=!!state.checked;
   if(model.view==='tracker'){const stage=$('tracker-stage').value;return !stage||(stage==='sent'?checked:applicationStage(r)===stage);}
   return !(status==='sent'&&!checked||status==='unsent'&&checked||status==='ready'&&!r.cv_ready||status==='complete'&&!r.complete||status==='incomplete'&&(r.complete||r.kind!=='job'));
-});}
+}).sort((a,b)=>compareRows(a,b,$('sort-order').value));}
 function render(){
   renderMetrics();$('view-title').textContent=labels[model.view];
   $('agent-panel').hidden=model.view!=='agent';
@@ -263,6 +280,14 @@ function render(){
     const state=applicationState(row),tr=node('tr');tr.dataset.id=row.id;tr.classList.toggle('sent',!!state.checked);
     const check=node('td',undefined,'check-cell');if(row.kind!=='document'){const input=node('input');input.type='checkbox';input.checked=!!state.checked;input.setAttribute('aria-label','Candidatura già inviata a '+(row.company||row.name));input.addEventListener('change',()=>{setApplicationRow(row,{checked:input.checked});if(!tracker)render();});check.append(input);}
     const main=node('td');main.append(node('div',row.company||row.name,'company'),node('div',row.title||row.role,'role'));
+    if(row.kind==='job'||row.fit){
+      const score=alignmentScore(row),summary=node('div',undefined,'alignment-summary');
+      const badge=node('span',score===null?'Allineamento n.d.':`Allineamento ${score}/100`,'badge alignment-score');
+      badge.title='Affinità delle competenze documentate con l’annuncio; non probabilità di assunzione.';
+      summary.append(badge);
+      if(row.fit?.application_tier)summary.append(node('span',fitLabels[row.fit.application_tier]||'Da verificare','subline'));
+      main.append(summary);
+    }
     if(row.kind==='job'){
       main.append(node('div',row.saved?'Salvato LinkedIn':'Ricerca archiviata','subline'));
       const observed=row.first_seen_at||row.captured_at;
@@ -522,7 +547,7 @@ function selectView(view){if(!Object.hasOwn(labels,view))return;model.view=view;
 document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{history.replaceState(null,'',location.pathname+location.search+'#'+b.dataset.view);selectView(b.dataset.view);}));
 window.addEventListener('hashchange',()=>selectView(viewFromHash()));
 $('agent-connect').onclick=()=>{const value=$('agent-token').value.trim();$('agent-token').value='';loadAgentCollection(value||undefined);};
-for(const id of ['search','area','status','distance','tracker-stage'])$(id).addEventListener(id==='search'?'input':'change',()=>{model.page=0;render();});
+for(const id of ['search','area','status','distance','tracker-stage','fit-min','fit-tier','sort-order'])$(id).addEventListener(['search','fit-min'].includes(id)?'input':'change',()=>{model.page=0;render();});
 for(const [value,text]of Object.entries(stages)){const option=node('option',text);option.value=value;$('tracker-stage').append(option);}
 $('newsletter-grouping').onchange=e=>{model.newsletter.draft.grouping=e.target.value;markNewsletterDirty();};
 for(const key of Object.keys(newsletterNumbers))$('newsletter-'+key).oninput=e=>{model.newsletter.draft[key]=e.target.value===''?null:Number(e.target.value);markNewsletterDirty();};
