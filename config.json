@@ -3,5 +3,9 @@
   "salt": "fAfblRnu+QZ0QUBRhRSXhQ==",
   "iterations": 600000,
   "repository": "sMelegar8/career-desk",
-  "branch": "main"
+  "branch": "main",
+  "catalog": {
+    "url": "catalog.gz.enc",
+    "compression": "gzip"
+  }
 }
