@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const enc = new TextEncoder(), dec = new TextDecoder();
 const AAD = enc.encode('career-desk-v1');
 const model = {data:null,key:null,config:null,checks:{version:2,rows:{}},view:'saved',page:0,local:false,csrf:'',token:'',save:Promise.resolve(),agentRows:[],session:0,newsletter:{draft:null,revision:'',loaded:false,dirty:false}};
-const labels = {'parma-research':'Parma · opportunità ottobre 2026',saved:'Salvati LinkedIn',agent:'Salvati da AI Job Agent',tracker:'Tracker candidature',newsletter:'Newsletter / Brief',jobs:'Tutti gli annunci',companies:'Aziende e recruiter',documents:'Libreria CV',reviews:'Revisioni ATS','linkedin-profile':'Profilo LinkedIn',impact:'Impatto CV'};
+const labels = {integrations:'Integrazioni',intelligence:'Job Intelligence','parma-research':'Parma · opportunità ottobre 2026',saved:'Salvati LinkedIn',agent:'Salvati da AI Job Agent',tracker:'Tracker candidature',newsletter:'Newsletter / Brief',jobs:'Tutti gli annunci',companies:'Aziende e recruiter',documents:'Libreria CV',reviews:'Revisioni ATS','linkedin-profile':'Profilo LinkedIn',impact:'Impatto CV'};
 const stages = {planned:'Da valutare',interested:'Mi interessa',applied:'Inviata',interview:'Colloquio',offer:'Offerta',rejected:'Esito negativo',withdrawn:'Ritirata'};
 const applicationStages = ['applied','interview','offer','rejected','withdrawn'];
 const newsletterAreas = ['R&D','Project Management','Software Development','Chimica e laboratorio','Data Analysis e Data Engineering','AI e LLM','Qualita e Compliance','Altre opportunita'];
@@ -27,7 +27,7 @@ function merge(...states){
   for(const state of states)for(const [id,row]of Object.entries(state?.rows||{})){
     if(!row||typeof row.checked!=='boolean'||!Number.isFinite(Date.parse(row.updatedAt))||['__proto__','constructor','prototype'].includes(id))continue;
     const clean={checked:row.checked,updatedAt:row.updatedAt};
-    for(const field of ['note','stage','deadline','submitted_on','follow_up','channel','cv_version','cv_sha256','outcome','matched_cv_id','matched_cv_sha256','cover_letter','cover_letter_language','cover_letter_cv_sha256'])if(Object.hasOwn(row,field))clean[field]=String(row[field]??'').slice(0,field==='cover_letter'?16000:field==='note'?8000:512);
+    for(const field of ['note','stage','deadline','submitted_on','follow_up','channel','cv_version','cv_sha256','outcome','matched_cv_id','matched_cv_sha256','cover_letter','cover_letter_language','cover_letter_cv_sha256','recruiter','interview_on'])if(Object.hasOwn(row,field))clean[field]=String(row[field]??'').slice(0,field==='cover_letter'?16000:field==='note'?8000:512);
     const previous=out.rows[id];
     // Older clients omit new fields; an explicit empty string still clears a field.
     out.rows[id]=!previous||Date.parse(clean.updatedAt)>=Date.parse(previous.updatedAt)?{...previous,...clean}:{...clean,...previous};
@@ -267,6 +267,7 @@ function compareRows(a,b,order){
 function alignmentTier(row){return applicationState(row).matched_cv_id?'cv_comparison':row.fit?.application_tier;}
 function visibleRows(){const q=$('search').value.toLocaleLowerCase('it'),area=$('area').value,status=$('status').value,distance=$('distance').value,minScore=$('fit-min').value,tier=$('fit-tier').value;return allRows().filter(r=>{
   const score=alignmentScore(r);
+  if(!integrationFilter(r))return false;
   if(minScore!==''&&(score===null||score<Number(minScore)))return false;
   if(tier&&(tier==='unscored'?score!==null:alignmentTier(r)!==tier))return false;
   if(distance){const km=r.distance_from_parma_km,verified=r.location_verification==='verified'&&Number.isFinite(km);if(distance==='unknown'?verified:!verified||km>Number(distance))return false;}
@@ -278,11 +279,13 @@ function visibleRows(){const q=$('search').value.toLocaleLowerCase('it'),area=$(
   return !(status==='sent'&&!checked||status==='unsent'&&checked||status==='ready'&&!(state.matched_cv_id?getDoc(r)?.ready:r.cv_ready)||status==='complete'&&!r.complete||status==='incomplete'&&(r.complete||r.kind!=='job'));
 }).sort((a,b)=>compareRows(a,b,$('sort-order').value));}
 function render(){
+  renderExplorerFilters();
   renderMetrics();$('view-title').textContent=labels[model.view];
   $('agent-panel').hidden=model.view!=='agent';
+  const extra=['integrations','intelligence'].includes(model.view);$('integrations-panel').hidden=model.view!=='integrations';$('intelligence-panel').hidden=model.view!=='intelligence';
   const parma=model.view==='parma-research',impact=model.view==='impact',newsletter=model.view==='newsletter',tracker=model.view==='tracker',linkedin=model.view==='linkedin-profile';$('parma-research-panel').hidden=!parma;$('impact-panel').hidden=!impact;$('newsletter-panel').hidden=!newsletter;$('linkedin-profile-panel').hidden=!linkedin;
-  for(const selector of ['.metrics','.toolbar','.search','.filter-drawer','.table-wrap','.pagination','#results-status','#empty'])document.querySelector(selector).hidden=parma||impact||newsletter||linkedin;
-  document.querySelector('.metrics').hidden=parma||impact||newsletter||linkedin||tracker;
+  for(const selector of ['.metrics','.toolbar','.search','.filter-drawer','.table-wrap','.pagination','#results-status','#empty'])document.querySelector(selector).hidden=parma||impact||newsletter||linkedin||extra;
+  document.querySelector('.metrics').hidden=parma||impact||newsletter||linkedin||extra||tracker;
   $('status').hidden=tracker;$('tracker-stage').hidden=!tracker;
   document.querySelector('table').classList.toggle('tracker-table',tracker);
   const headings=document.querySelectorAll('thead th');headings[2].textContent=tracker?'Stato': 'Sede';headings[3].textContent=tracker?'Invio / Follow-up':'Documenti';headings[4].textContent=tracker?'Canale / CV / Esito':'Revisione';
@@ -296,6 +299,7 @@ function render(){
   $('updated').textContent='Aggiornato '+new Date(model.data.updated_at).toLocaleDateString('it-IT');
   document.querySelectorAll('[data-view]').forEach(b=>{b.classList.toggle('active',b.dataset.view===model.view);b.setAttribute('aria-current',b.dataset.view===model.view?'page':'false');});
   renderTrackerSummary(tracker);
+  if(extra){$('view-subtitle').textContent='';if(model.view==='integrations')renderIntegrations();else renderJobIntelligence();return;}
   if(parma){renderParmaResearch();return;}
   if(impact){renderImpact();return;}
   if(newsletter){renderNewsletter();return;}
@@ -362,8 +366,8 @@ function applicationFields(parent,row,doc){
   const state=applicationState(row),s=section(parent,'Candidatura'),grid=node('div',undefined,'application-fields');
   const checkLabel=node('label',undefined,'check-label'),check=node('input');check.type='checkbox';check.checked=!!state.checked;check.onchange=()=>{setApplicationRow(row,{checked:check.checked});select.value=applicationStage(row);if(model.view!=='tracker')render();};checkLabel.append(check,document.createTextNode('Candidatura già inviata'));s.append(checkLabel);
   const label=node('label','Fase'),select=stageSelect(row);select.addEventListener('change',()=>{check.checked=!!applicationState(row).checked;});label.append(select);grid.append(label);
-  for(const [key,text]of [['submitted_on','Data invio'],['deadline','Scadenza'],['follow_up','Follow-up'],['channel','Canale'],['cv_version','Versione CV'],['cv_sha256','Hash CV (SHA256)'],['outcome','Esito']]){
-    const l=node('label',text),input=node('input'),date=['submitted_on','deadline','follow_up'].includes(key);input.type=date?'date':'text';input.value=state[key]||'';input.setAttribute('aria-label',text);input.maxLength=key==='cv_sha256'?64:512;
+  for(const [key,text]of [['recruiter','Recruiter'],['interview_on','Data colloquio'],['submitted_on','Data invio'],['deadline','Scadenza'],['follow_up','Follow-up'],['channel','Canale'],['cv_version','Versione CV'],['cv_sha256','Hash CV (SHA256)'],['outcome','Esito']]){
+    const l=node('label',text),input=node('input'),date=['submitted_on','deadline','follow_up','interview_on'].includes(key);input.type=date?'date':'text';input.value=state[key]||'';input.setAttribute('aria-label',text);input.maxLength=key==='cv_sha256'?64:512;
     if(key==='cv_sha256')input.pattern='[a-fA-F0-9]{64}';
     input.addEventListener(date||key==='cv_sha256'?'change':'input',()=>{if(!input.checkValidity()){input.reportValidity();return;}setApplicationRow(row,{[key]:key==='cv_sha256'?input.value.toLowerCase():input.value});if(key==='submitted_on')unknown.hidden=!!input.value;});
     l.append(input);grid.append(l);
@@ -548,7 +552,7 @@ function showDetail(row){
   root.append(actions);
   if(model.view==='tracker'&&row.kind!=='document')applicationFields(root,row,doc);
   if(row.draft&&model.local){const s=section(root,'Bozza da verificare');s.append(button('Controlla le due pagine','eye',()=>showPreview(row,s)));}
-  if(row.kind==='job')renderWorkbench(root,row);
+  if(row.kind==='job'){renderJobSourceDetails(root,row);renderWorkbench(root,row);}
   if(!applicationState(row).matched_cv_id){if(row.kind==='job')renderFit(root,row.fit);}
   else if(row.kind==='job'){const historical=node('details');historical.append(node('summary','Analisi generale archiviata del profilo'));renderFit(historical,row.fit);root.append(historical);}
   if(row.kind==='job'){
@@ -638,7 +642,7 @@ $('settings').onclick=()=>{$('sync-dialog').showModal();};
 $('sync-now').onclick=async()=>{model.token=$('github-token').value.trim();$('github-token').value='';try{await githubSync();$('sync-message').textContent='Candidature, CV associati e lettere sincronizzati.';}catch(e){$('sync-message').textContent=e.message;}};
 $('export-state').onclick=async()=>saveBlob(JSON.stringify(await encrypt(model.checks)),'Career_Desk_Candidature.enc','application/json');
 $('import-state').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;const incoming=JSON.parse(dec.decode(await decrypt(JSON.parse(await file.text()))));model.checks=merge(model.checks,incoming);await persist();render();toast('Spunte importate');}catch{toast('File non valido o cifrato con un’altra password');}e.target.value='';};
-$('lock').onclick=async()=>{clearTimeout(saveTimer);await persist(false);await model.save;applicationCache=null;documentCache=null;model.session++;AgentSaved.lock();model.agentRows=[];$('agent-token').value='';$('agent-message').textContent='';$('count-agent').textContent='0';model.data=null;model.key=null;model.token='';model.checks={version:2,rows:{}};model.newsletter={draft:null,revision:'',loaded:false,dirty:false};$('newsletter-form').reset();$('newsletter-sections').replaceChildren();$('newsletter-preview-frame').removeAttribute('srcdoc');$('newsletter-preview-frame').hidden=true;$('workspace').hidden=true;$('rows').replaceChildren();$('detail-content').replaceChildren();$('linkedin-profile-panel').replaceChildren();$('parma-research-panel').replaceChildren();document.querySelectorAll('dialog').forEach(d=>d.close());$('login').hidden=false;};
+$('lock').onclick=async()=>{clearTimeout(saveTimer);await persist(false);await model.save;applicationCache=null;documentCache=null;model.session++;AgentSaved.lock();model.agentRows=[];$('agent-token').value='';$('agent-message').textContent='';$('count-agent').textContent='0';model.data=null;model.key=null;model.token='';model.checks={version:2,rows:{}};model.newsletter={draft:null,revision:'',loaded:false,dirty:false};$('newsletter-form').reset();$('newsletter-sections').replaceChildren();$('newsletter-preview-frame').removeAttribute('srcdoc');$('newsletter-preview-frame').hidden=true;$('workspace').hidden=true;$('rows').replaceChildren();$('detail-content').replaceChildren();$('linkedin-profile-panel').replaceChildren();$('parma-research-panel').replaceChildren();$('integrations-panel').replaceChildren();$('intelligence-panel').replaceChildren();document.querySelectorAll('dialog').forEach(d=>d.close());$('login').hidden=false;};
 $('refresh').onclick=async()=>{if(model.view==='newsletter'&&model.local){await loadNewsletterConfig();return;}if(model.view==='agent'){await loadAgentCollection();return;}try{if(model.local){model.data=await readCatalog();model.checks=merge(model.data.state,model.checks);}else{model.config=await fetchJSON('config.json');model.data=await readCatalog();const shared=JSON.parse(dec.decode(await decrypt(await fetchJSON('state.enc'))));model.checks=merge(model.data.state,shared,model.checks);model.newsletter={draft:null,revision:'',loaded:false,dirty:false};$('newsletter-sections').replaceChildren();}render();toast('Dashboard aggiornata');}catch(e){toast(e.message);}};
 $('run-all').onclick=()=>runReviews();$('publish').onclick=async()=>{try{toast('Pubblicazione in corso…');const result=await localAPI('publish',{});toast(result.message);}catch(e){toast(e.message);}};
 $('linkedin-login').onclick=async()=>{try{const result=await localAPI('linkedin-login',{});toast(result.message);}catch(e){toast(e.message);}};

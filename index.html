@@ -9,11 +9,12 @@
   <title>Career Desk</title>
   <link rel="icon" href="icon.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="style.css?v=e1475433d6dc9a91">
+  <link rel="stylesheet" href="style.css?v=31dc81c23e12d545">
   <script src="lucide.min.js?v=3411692820cb8d47" defer></script>
   <script src="agent_saved.js?v=a3e8608ff5ce819c" defer></script>
   <script src="matching.js?v=06041d3de6fe5541" defer></script>
-  <script src="app.js?v=8ce293081ba27991" defer></script>
+  <script src="integrations.js?v=f686ee01ae70b913" defer></script>
+  <script src="app.js?v=d3f0922138f36d9e" defer></script>
 </head>
 <body>
   <section id="login" class="access">
@@ -36,6 +37,8 @@
         <button data-view="jobs"><i data-lucide="briefcase-business"></i> Tutti gli annunci <span id="count-jobs"></span></button>
         <button data-view="companies"><i data-lucide="building-2"></i> Aziende e recruiter <span id="count-companies"></span></button>
         <button data-view="parma-research"><i data-lucide="map-pin"></i> Parma · ottobre 2026</button>
+        <button data-view="integrations"><i data-lucide="plug"></i> Integrazioni</button>
+        <button data-view="intelligence"><i data-lucide="chart-no-axes-combined"></i> Job Intelligence</button>
         <button data-view="newsletter"><i data-lucide="newspaper"></i> Newsletter / Brief</button>
         </section>
         <section class="nav-group" aria-label="Candidature e documenti"><h2>Candidature e documenti</h2>
@@ -53,10 +56,16 @@
         <label class="search search-row"><i data-lucide="search"></i><input id="search" type="search" placeholder="Cerca azienda, ruolo, competenza" aria-label="Cerca"></label><details class="filter-drawer"><summary>Ricerca e filtri</summary><div class="toolbar"><select id="area" aria-label="Area"><option value="">Tutte le aree</option></select><select id="distance" aria-label="Distanza da Parma"><option value="">Qualsiasi distanza</option><option value="30">Entro 30 km</option><option value="100">Entro 100 km</option><option value="200">Entro 200 km</option><option value="300">Entro 300 km</option><option value="unknown">Distanza da verificare</option></select><select id="status" aria-label="Stato"><option value="">Tutti gli stati</option><option value="unsent">Non inviati</option><option value="sent">Inviati</option><option value="ready">CV pronto</option><option value="complete">Annuncio completo</option><option value="incomplete">Testo da integrare</option></select><select id="tracker-stage" aria-label="Fase nel tracker" hidden><option value="">Tutte le candidature</option><option value="sent">Già inviate</option></select>
           <label class="score-filter" for="fit-min">Min. /100<input id="fit-min" type="number" min="0" max="100" step="1" placeholder="0" aria-label="Allineamento minimo"></label>
           <select id="fit-tier" aria-label="Livello di allineamento"><option value="">Tutti i livelli</option><option value="apply_now">Candidatura diretta</option><option value="bridge">Affini con gap</option><option value="insufficient_information">Da verificare</option><option value="not_aligned">Non allineati</option><option value="unscored">Senza punteggio</option></select>
+          <select id="job-source" aria-label="Fonte"><option value="">Tutte le fonti</option></select>
+          <select id="job-lifecycle" aria-label="Ciclo di vita"><option value="">Tutti i cicli di vita</option><option value="new">Nuovi</option><option value="updated">Aggiornati</option><option value="reactivated">Riattivati</option><option value="expired">Scaduti</option></select>
+          <select id="career-profile" aria-label="Profilo di carriera"><option value="">Tutti i profili</option><option value="ai_software">AI e software</option><option value="scientific_data">Dati scientifici e laboratorio digitale</option><option value="rd_process">R&amp;D e processi</option><option value="technical_leadership">Coordinamento tecnico</option></select>
+          <label>Nome ricerca<input id="search-name" maxlength="80" required aria-label="Nome ricerca"></label><button id="save-search" type="button">Salva ricerca</button><select id="saved-search" aria-label="Ricerche salvate"><option value="">Ricerche salvate</option></select>
           <select id="sort-order" aria-label="Ordina annunci"><option value="score-desc">Allineamento: decrescente</option><option value="score-asc">Allineamento: crescente</option><option value="date-desc">Data: più recenti</option><option value="distance-asc">Distanza: più vicini</option><option value="company">Azienda: A-Z</option><option value="role">Ruolo: A-Z</option></select>
         </div></details>
         <div id="agent-panel" class="notice" hidden><p>Documenti nel repository privato. Il CV resta una bozza tailored da verificare prima dell'invio. Dal PC viene usato l'accesso GitHub locale; dal telefono serve un token limitato ad Auto-LinkdIn-v2.0 con permesso Contents: read e, per accodare CV, Actions: write, conservato solo in memoria fino al blocco o alla chiusura.</p><label for="agent-token">Accesso alla raccolta privata</label><input type="password" id="agent-token" autocomplete="off"><button id="agent-connect" class="primary">Collega / aggiorna raccolta</button><p id="agent-message" role="status"></p></div>
         <section id="parma-research-panel" hidden aria-label="Opportunità Parma ottobre 2026"></section>
+        <section id="integrations-panel" hidden aria-label="Integrazioni offerte"></section>
+        <section id="intelligence-panel" hidden aria-label="Analisi delle opportunità"></section>
         <section id="impact-panel" hidden><p id="impact-progress" class="impact-progress" aria-live="polite"></p><div id="impact-questions"></div></section>
         <section id="linkedin-profile-panel" hidden aria-label="Revisione del profilo LinkedIn"></section>
         <section id="newsletter-panel" hidden aria-label="Editor Newsletter e Brief">
