@@ -57,7 +57,7 @@ const CareerCloud=(()=>{
   }
   async function load(){
     const value=await status();
-    if(model.data){model.data.connections=value.connections;model.data.integrations=value.integrations;model.data.newsletter=value.newsletter;if(value.job_intelligence)model.data.job_intelligence=value.job_intelligence;mergeOverlay(value.jobs_overlay);}
+    if(model.data){model.data.connections=value.connections;model.data.integrations=value.integrations;model.data.newsletter=value.newsletter;if(value.job_intelligence)model.data.job_intelligence=value.job_intelligence;mergeOverlay(value.jobs_overlay);CareerApplicationMail.apply(value.application_mail);}
     return value.connections;
   }
   async function encryptedRequest(route,body,id){
@@ -71,8 +71,8 @@ const CareerCloud=(()=>{
     return {version:1,key_id:settings.key_id,wrapped_key:base64(new Uint8Array(wrapped)),iv:base64(iv),data:base64(new Uint8Array(ciphertext))};
   }
   async function request(route,body){
-    if(!['connections','job-integrations','job-import','job-sync','job-feedback','newsletter-config'].includes(route))throw new Error('Questa operazione richiede il programma sul PC.');
-    if(body===undefined){await load();return route==='connections'?lastStatus.connections:route==='job-integrations'?lastStatus.integrations:route==='newsletter-config'?lastStatus.newsletter:{};}
+    if(!['connections','job-integrations','job-import','job-sync','job-feedback','newsletter-config','application-mail'].includes(route))throw new Error('Questa operazione richiede il programma sul PC.');
+    if(body===undefined){await load();return route==='connections'?lastStatus.connections:route==='job-integrations'?lastStatus.integrations:route==='newsletter-config'?lastStatus.newsletter:route==='application-mail'?lastStatus.application_mail||{version:1,jobs:[],state:{version:2,rows:{}},notifications:[]}:{};}
     const current=epoch,id=crypto.randomUUID(),envelope=await encryptedRequest(route,body,id);
     await api('/contents/data/career_cloud_requests/'+id+'.json',{method:'PUT',body:JSON.stringify({branch:'main',message:'Queue encrypted Career Desk configuration [skip ci]',content:base64(encode(JSON.stringify(envelope)))})});
     try{await api('/actions/workflows/connections.yml/dispatches',{method:'POST',body:JSON.stringify({ref:'main'})});}

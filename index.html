@@ -9,14 +9,15 @@
   <title>Career Desk</title>
   <link rel="icon" href="icon.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="style.css?v=108520098bf8992b">
+  <link rel="stylesheet" href="style.css?v=99adca7add2754d3">
   <script src="lucide.min.js?v=3411692820cb8d47" defer></script>
   <script src="agent_saved.js?v=a3e8608ff5ce819c" defer></script>
   <script src="matching.js?v=06041d3de6fe5541" defer></script>
-  <script src="integrations.js?v=6b0683c9d450e7b6" defer></script>
-  <script src="cloud.js?v=7e683609f48e26bb" defer></script>
-  <script src="connections.js?v=9b26a1a32a7b9752" defer></script>
-  <script src="app.js?v=968df09c294f48e2" defer></script>
+  <script src="integrations.js?v=f2fefe82ed669b92" defer></script>
+  <script src="cloud.js?v=34b0e4b0878f73c7" defer></script>
+  <script src="connections.js?v=6a99c0501e8b73ea" defer></script>
+  <script src="application_mail.js?v=99ca03788317b91f" defer></script>
+  <script src="app.js?v=5f7c31cad140bdfd" defer></script>
 </head>
 <body>
   <section id="login" class="access">
@@ -46,6 +47,7 @@
         </section>
         <section class="nav-group" aria-label="Candidature e documenti"><h2>Candidature e documenti</h2>
         <button data-view="tracker"><i data-lucide="list-checks"></i> Tracker candidature <span id="count-tracker">0</span></button>
+        <button data-view="notifications"><i data-lucide="bell"></i> Notifiche <span id="count-notifications">0</span></button>
         <button data-view="documents"><i data-lucide="files"></i> Libreria CV <span id="count-documents"></span></button>
         <button data-view="reviews"><i data-lucide="scan-text"></i> Revisioni ATS <span id="count-reviews"></span></button>
         <button data-view="impact"><i data-lucide="clipboard-list"></i> Impatto CV <span id="count-impact"></span></button>
@@ -68,6 +70,7 @@
         <div id="agent-panel" class="notice" hidden><p>Documenti nel repository privato. Il CV resta una bozza tailored da verificare prima dell'invio. Dal PC viene usato l'accesso GitHub locale; dal telefono serve un token limitato ad Auto-LinkdIn-v2.0 con permesso Contents: read e, per accodare CV, Actions: write, conservato solo in memoria fino al blocco o alla chiusura.</p><label for="agent-token">Accesso alla raccolta privata</label><input type="password" id="agent-token" autocomplete="off"><button id="agent-connect" class="primary">Collega / aggiorna raccolta</button><p id="agent-message" role="status"></p></div>
         <section id="parma-research-panel" hidden aria-label="Opportunità Parma ottobre 2026"></section>
         <section id="connections-panel" hidden aria-label="Connessioni e configurazione"></section>
+        <section id="notifications-panel" hidden aria-label="Notifiche candidature"></section>
         <section id="integrations-panel" hidden aria-label="Integrazioni offerte"></section>
         <section id="intelligence-panel" hidden aria-label="Analisi delle opportunità"></section>
         <section id="impact-panel" hidden><p id="impact-progress" class="impact-progress" aria-live="polite"></p><div id="impact-questions"></div></section>
