@@ -9,12 +9,13 @@
   <title>Career Desk</title>
   <link rel="icon" href="icon.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="style.css?v=31dc81c23e12d545">
+  <link rel="stylesheet" href="style.css?v=108520098bf8992b">
   <script src="lucide.min.js?v=3411692820cb8d47" defer></script>
   <script src="agent_saved.js?v=a3e8608ff5ce819c" defer></script>
   <script src="matching.js?v=06041d3de6fe5541" defer></script>
   <script src="integrations.js?v=f686ee01ae70b913" defer></script>
-  <script src="app.js?v=d3f0922138f36d9e" defer></script>
+  <script src="connections.js?v=59d84ce550f08cb3" defer></script>
+  <script src="app.js?v=d624adb438912919" defer></script>
 </head>
 <body>
   <section id="login" class="access">
@@ -37,6 +38,7 @@
         <button data-view="jobs"><i data-lucide="briefcase-business"></i> Tutti gli annunci <span id="count-jobs"></span></button>
         <button data-view="companies"><i data-lucide="building-2"></i> Aziende e recruiter <span id="count-companies"></span></button>
         <button data-view="parma-research"><i data-lucide="map-pin"></i> Parma · ottobre 2026</button>
+        <button data-view="connections"><i data-lucide="settings"></i> Connessioni e configurazione</button>
         <button data-view="integrations"><i data-lucide="plug"></i> Integrazioni</button>
         <button data-view="intelligence"><i data-lucide="chart-no-axes-combined"></i> Job Intelligence</button>
         <button data-view="newsletter"><i data-lucide="newspaper"></i> Newsletter / Brief</button>
@@ -64,6 +66,7 @@
         </div></details>
         <div id="agent-panel" class="notice" hidden><p>Documenti nel repository privato. Il CV resta una bozza tailored da verificare prima dell'invio. Dal PC viene usato l'accesso GitHub locale; dal telefono serve un token limitato ad Auto-LinkdIn-v2.0 con permesso Contents: read e, per accodare CV, Actions: write, conservato solo in memoria fino al blocco o alla chiusura.</p><label for="agent-token">Accesso alla raccolta privata</label><input type="password" id="agent-token" autocomplete="off"><button id="agent-connect" class="primary">Collega / aggiorna raccolta</button><p id="agent-message" role="status"></p></div>
         <section id="parma-research-panel" hidden aria-label="Opportunità Parma ottobre 2026"></section>
+        <section id="connections-panel" hidden aria-label="Connessioni e configurazione"></section>
         <section id="integrations-panel" hidden aria-label="Integrazioni offerte"></section>
         <section id="intelligence-panel" hidden aria-label="Analisi delle opportunità"></section>
         <section id="impact-panel" hidden><p id="impact-progress" class="impact-progress" aria-live="polite"></p><div id="impact-questions"></div></section>
