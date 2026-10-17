@@ -47,7 +47,7 @@ const CareerApplicationMail=(()=>{
     if(!items.length){root.append(node('p','Nessuna notifica sulle candidature. Seleziona le caselle in Connessioni e includi nella cartella scelta conferme di invio e risposte.'));return;}
     for(const item of items){
       const card=node('article',undefined,'mail-notification'+(item.status==='read'?' is-read':''));card.append(node('span',item.status==='needs_review'?'Da verificare':item.status==='read'?'Letta':'Nuova','badge'),node('h2',item.title||'Aggiornamento candidatura'),node('p',item.message||''));
-      card.append(node('p',date(item.received_at)+' · '+(item.evidence?.source||'Email'),'muted'));
+      card.append(node('p',date(item.received_at)+' · Email ricevuta','muted'));
       if(item.evidence?.subject){const evidence=node('details');evidence.append(node('summary','Riferimento email'),node('p',item.evidence.subject));card.append(evidence);}
       const buttons=node('div',undefined,'actions');if(item.job_id)buttons.append(button('Apri nel tracker','list-checks',()=>openTracker(item.job_id)));
       if(canConfigure()&&item.status!=='read')buttons.append(button('Segna come letta','check',async()=>{try{await action({action:'acknowledge',ids:[item.id]});}catch(error){toast(error.message);}}));card.append(buttons);root.append(card);
