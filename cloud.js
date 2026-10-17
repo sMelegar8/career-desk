@@ -3,7 +3,7 @@ function canConfigure(){return model.local||CareerCloud.connected;}
 const CareerCloud=(()=>{
   const repository='sMelegar8/Auto-LinkdIn-v2.0',prefix='https://api.github.com/repos/'+repository;
   const aad=new TextEncoder().encode('CareerDesk/cloud-command/v1');
-  let token='',config=null,epoch=0,lastStatus=null,loading=null;
+  let token='',config=null,epoch=0,lastStatus=null;
   const oauthStates=new Map();
   const encode=value=>new TextEncoder().encode(value),decode=value=>new TextDecoder().decode(value);
   function bytes(value){return Uint8Array.from(atob(value),c=>c.charCodeAt(0));}
@@ -42,9 +42,12 @@ const CareerCloud=(()=>{
     model.data.audit.all_jobs=model.data.jobs.length;model.data.audit.complete_jobs=model.data.jobs.filter(job=>job.complete).length;
   }
   async function status(){
-    const current=epoch,file=await api('/contents/data/career_cloud_status.json?ref=main');
-    if(file.encoding!=='base64'||typeof file.content!=='string')throw new Error('Stato cloud non disponibile.');
-    const value=JSON.parse(decode(bytes(file.content.replace(/\s/g,''))));
+    const current=epoch,file=await api('/contents/data/career_cloud_status.json?ref=main',{headers:{Accept:'application/vnd.github.raw+json'}});
+    let value=file;
+    if(file.version!==1){
+      if(file.encoding!=='base64'||typeof file.content!=='string')throw new Error('Stato cloud non disponibile.');
+      value=JSON.parse(decode(bytes(file.content.replace(/\s/g,''))));
+    }
     if(current!==epoch)throw new Error('Sessione GitHub chiusa.');
     if(value.version!==1||value.connections?.scope!=='github_actions')throw new Error('Formato stato GitHub non valido.');
     lastStatus=value;return value;

@@ -23,7 +23,7 @@ async function connectionAction(body,message,trigger){
   }catch(e){if(session===model.session&&model.data)message.textContent=e.message;}finally{if(trigger)trigger.disabled=false;}
 }
 function renderConnections(){
-  const root=$('connections-panel');root.replaceChildren();root.oninput=root.onchange=event=>{if(event.target.closest('[data-connection-form]'))connectionsDirty=true;};const editable=canConfigure(),cloud=!model.local&&editable,data=editable?connectionsData:model.data.connections;
+  const root=$('connections-panel');root.replaceChildren();root.oninput=root.onchange=event=>{if(event.target.closest('[data-connection-form]'))connectionsDirty=true;};const editable=canConfigure(),cloud=!model.local&&editable,data=editable?connectionsData:null;
   root.append(node('p',model.local?'Collega gli account, scegli le fonti e controlla le verifiche. Le credenziali sono protette dall’account Windows di questo PC.':'Collega GitHub per configurare gli account anche da telefono. Il monitor GitHub Actions funziona senza il PC acceso.','notice'));
   if(!model.local)CareerCloud.renderAccess(root);
   if(!data){root.append(node('p',editable?'Caricamento configurazione…':'Collega GitHub per caricare configurazione e checklist aggiornate.'));if(editable&&!connectionsLoad)loadConnections();return;}
