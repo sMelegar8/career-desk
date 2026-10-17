@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "repository": "sMelegar8/Auto-LinkdIn-v2.0",
+  "branch": "main",
+  "workflow": "connections.yml",
+  "public_key": "MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEA4rhkFR0OpX9fZgfKfyqzyZSY5vQFSEDVwZuH6N4Z7ul7/MfZYje4OXQgEjTeST3rmD6N0ZcnwIV3+lraj55GdqYE1BmC2fXGPA/K2qYDe4gpHF3Fn66y+7CAsBGRluLRFNkWUa06mVbcgcG7nXl1TrToMp9z2w5imyCAkArWDoZgC6EV1MQqWMf6gHIy9vIapnjF4S7HqRiD6KQgWgnr5q+sN0XnfWTq9T1JIfC+CY0zEjiUGHqzVf4YNMOOQ+Kqboi/Za4oc0pRzZMwXj6Kavl6RhAn89Rd40Nb+AYEy7VirE8VOJbemPiPlWt36G1CNm5wFP46AEhqrPZYw1gP5mprG8mIUboOOe+wGhaDlifbouX/X+Ttrk66+raltf+ndmYSNGXtHT3aRzzk/V3MK3ZRppFgfWa2uFfpO4u6d0r1s6cP5OPhTK25ik1xZyRYC7i9yU4SAlJKNbOJu75xiYypPdaC605WviwXmYXTwPu0u1uTrS8pYzA7CUlQcOZJAgMBAAE=",
+  "key_id": "dc71aabbfb7405b0728dd757724f4432cd327f53c72422bd56cf0c1f64008a12",
+  "callback": "https://smelegar8.github.io/career-desk/oauth-callback.html"
+}

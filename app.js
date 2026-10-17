@@ -76,7 +76,7 @@ function setApplicationRow(row,change){
   setRow(record.id,state);if(model.view==='tracker')render();
 }
 const storageKey=()=> 'career-desk-state-'+model.config.salt;
-async function localAPI(path,body){return fetchJSON('/api/'+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-Desk-Client':'1','X-CSRF-Token':model.csrf},...(body?{body:JSON.stringify(body)}:{})});}
+async function localAPI(path,body){if(!model.local&&CareerCloud.connected)return CareerCloud.request(path,body);return fetchJSON('/api/'+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-Desk-Client':'1','X-CSRF-Token':model.csrf},...(body?{body:JSON.stringify(body)}:{})});}
 function catalogData(value){if(!value||!Array.isArray(value.jobs)||!Array.isArray(value.documents)||!Array.isArray(value.companies)||!value.audit||typeof value.audit!=='object')throw new Error('Catalogo incompleto: aggiorna la copia locale o riprova.');return value;}
 async function readCatalog(){
   if(model.local)return catalogData(await localAPI('catalog'));
@@ -101,7 +101,7 @@ async function unlock(password){
   populateAreas();render();await persist(false);
   document.dispatchEvent(new Event('career-ready'));
   if(['agent','tracker'].includes(model.view)&&AgentSaved.available())await loadAgentCollection();
-  if(model.view==='newsletter'&&model.local)await loadNewsletterConfig();
+  if(model.view==='newsletter'&&canConfigure())await loadNewsletterConfig();
   if(model.local)refreshWorker();
 }
 async function refreshWorker(){if(!model.local||!model.data||document.hidden||refreshWorker.pending)return;refreshWorker.pending=true;const session=model.session;try{const state=await localAPI('status');if(session!==model.session||!model.data)return;$('agent-count').textContent=state.running?'Ciclo di revisione in corso':'Nessun ciclo in esecuzione';model.running=state.running;renderSystem(state.system);if(model.revision!==undefined&&model.revision!==state.revision){model.revision=state.revision;const data=await readCatalog();if(session!==model.session||!model.data)return;model.data=data;model.checks=merge(model.data.state,model.checks);render();}model.revision=state.revision;}catch{$('agent-count').textContent='Connessione locale da verificare';}finally{refreshWorker.pending=false;}}
@@ -293,7 +293,7 @@ function render(){
   if(model.view==='agent')$('view-subtitle').textContent='Pacchetti conservati tramite Mi interessa: accesso privato e verifica prima dell\'invio';
   if(impact)$('view-subtitle').textContent='Dati verificabili per riscrivere i CV con risultati concreti';
   if(tracker)$('view-subtitle').textContent='Registro manuale delle candidature. Nessun invio dalla dashboard.';
-  if(newsletter)$('view-subtitle').textContent=model.local?'Configurazione del prossimo ciclo; nessuna email inviata al salvataggio.':'Configurazione esportata dal PC: sola lettura.';
+  if(newsletter)$('view-subtitle').textContent=canConfigure()?'Configurazione del prossimo ciclo; nessuna email inviata al salvataggio.':'Collega GitHub in Connessioni per modificare la newsletter.';
   if(linkedin)$('view-subtitle').textContent='';
   if(parma)$('view-subtitle').textContent='Nove aziende, priorità motivate e stato verificato al 14 ottobre 2026.';
   $('updated').textContent='Aggiornato '+new Date(model.data.updated_at).toLocaleDateString('it-IT');
@@ -457,12 +457,12 @@ function newsletterResponse(result){
 }
 function newsletterStatus(){
   const n=model.newsletter;
-  $('newsletter-mode').textContent=model.local?'PC locale: le modifiche salvate valgono dal prossimo ciclo.':'Web / mobile: sola lettura della configurazione esportata dal PC.';
-  $('newsletter-status').textContent=n.loading?'Lettura configurazione dal PC...':n.saving?'Salvataggio sul PC...':n.message||(n.dirty?'Modifiche non salvate':n.draft?'Configurazione '+(model.local?'letta dal PC':'esportata'):'Nessuna configurazione esportata disponibile.');
+  $('newsletter-mode').textContent=model.local?'PC locale: le modifiche salvate valgono dal prossimo ciclo.':canConfigure()?'GitHub Actions: modifica la newsletter da telefono; il PC può restare spento. L’anteprima è disponibile nella versione locale.':'Collega GitHub in Connessioni per modificare la newsletter da web o telefono.';
+  $('newsletter-status').textContent=n.loading?'Lettura configurazione...':n.saving?'Salvataggio configurazione...':n.message||(n.dirty?'Modifiche non salvate':n.draft?'Configurazione '+(model.local?'letta dal PC':canConfigure()?'letta da GitHub':'esportata'):'Nessuna configurazione esportata disponibile.');
   $('newsletter-error').textContent=n.error||'';
-  $('newsletter-fields').disabled=!model.local||!n.loaded||n.loading||n.saving;
-  $('newsletter-save').hidden=!model.local;$('newsletter-reload').hidden=!model.local;
-  $('newsletter-save').disabled=!model.local||!n.loaded||!n.dirty||n.loading||n.saving||n.previewLoading||n.conflict;
+  $('newsletter-fields').disabled=!canConfigure()||!n.loaded||n.loading||n.saving;
+  $('newsletter-save').hidden=!canConfigure();$('newsletter-reload').hidden=!canConfigure();
+  $('newsletter-save').disabled=!canConfigure()||!n.loaded||!n.dirty||n.loading||n.saving||n.previewLoading||n.conflict;
   $('newsletter-reload').disabled=n.loading||n.saving||n.previewLoading;
   $('newsletter-preview').hidden=!model.local;$('newsletter-preview').disabled=!!n.previewLoading||!!n.saving||!!n.loading;
 }
@@ -470,7 +470,7 @@ function markNewsletterDirty(){const n=model.newsletter;n.dirty=true;n.message='
 function renderNewsletter(fill=false){
   const n=model.newsletter;
   if(!n.draft&&model.data.newsletter){try{const saved=newsletterResponse(model.data.newsletter);n.draft=structuredClone(saved.config);n.revision=saved.revision;fill=true;}catch(e){n.error=e.message;}}
-  $('newsletter-form').hidden=!n.draft&&!model.local;$('newsletter-fields').hidden=!n.draft;
+  $('newsletter-form').hidden=!n.draft&&!canConfigure();$('newsletter-fields').hidden=!n.draft;
   if(n.draft&&(fill||!$('newsletter-sections').childElementCount)){
     const root=$('newsletter-sections');root.replaceChildren();
     for(const [index,section]of n.draft.sections.entries()){
@@ -492,29 +492,29 @@ function renderNewsletter(fill=false){
   newsletterStatus();
 }
 async function loadNewsletterConfig(){
-  if(!model.local||model.newsletter.loading||model.newsletter.saving||model.newsletter.previewLoading)return;
+  if(!canConfigure()||model.newsletter.loading||model.newsletter.saving||model.newsletter.previewLoading)return;
   const n=model.newsletter,session=model.session;n.loading=true;n.error='';newsletterStatus();
   try{
     const result=await localAPI('newsletter-config');if(session!==model.session||!model.data)return;
     const saved=newsletterResponse(result);n.confirmOverwrite=!!n.dirty&&(n.confirmOverwrite||n.revision!==saved.revision);
     if(!n.dirty)n.draft=structuredClone(saved.config);
     n.revision=saved.revision;n.loaded=true;n.conflict=false;model.data.newsletter=saved;
-    n.message=n.dirty?'Configurazione riletta; modifiche non salvate conservate.':'Configurazione letta dal PC.';
+    n.message=n.dirty?'Configurazione riletta; modifiche non salvate conservate.':model.local?'Configurazione letta dal PC.':'Configurazione letta da GitHub.';
     renderNewsletter(true);
   }catch(e){if(session===model.session)n.error=e.message;}
   finally{if(session===model.session){n.loading=false;newsletterStatus();}}
 }
 async function saveNewsletter(event){
   event.preventDefault();const n=model.newsletter;
-  if(!model.local||!n.loaded||!n.dirty||n.saving||n.loading||n.previewLoading||n.conflict||!$('newsletter-form').reportValidity())return;
+  if(!canConfigure()||!n.loaded||!n.dirty||n.saving||n.loading||n.previewLoading||n.conflict||!$('newsletter-form').reportValidity())return;
   try{validateNewsletter(n.draft);}catch(e){n.error=e.message;newsletterStatus();return;}
-  if(n.confirmOverwrite&&!confirm('La configurazione sul PC è cambiata. Sostituirla con le tue modifiche conservate?'))return;
+  if(n.confirmOverwrite&&!confirm('La configurazione condivisa è cambiata. Sostituirla con le tue modifiche conservate?'))return;
   const session=model.session,config=structuredClone(n.draft),expected_revision=n.revision;n.saving=true;n.error='';newsletterStatus();
   try{
     const result=await localAPI('newsletter-config',{config,expected_revision});if(session!==model.session||!model.data)return;
     const saved=newsletterResponse(result);n.draft=structuredClone(saved.config);n.revision=saved.revision;n.dirty=false;n.conflict=false;n.confirmOverwrite=false;n.githubSync=result.github_sync;model.data.newsletter=saved;
-    const sync=result.github_sync==='updated'?'GitHub aggiornato.':result.github_sync==='pending'?'Salvato sul PC; sincronizzazione GitHub in attesa.':'Stato sincronizzazione GitHub non confermato.';
-    n.message=(result.message||'Configurazione salvata sul PC.')+' '+sync;
+    const sync=result.github_sync==='updated'?'GitHub aggiornato.':result.github_sync==='pending'?(model.local?'Salvato sul PC; sincronizzazione GitHub in attesa.':'Aggiornamento GitHub in attesa.'):model.local?'Stato sincronizzazione GitHub non confermato.':'';
+    n.message=(result.message||(model.local?'Configurazione salvata sul PC.':'Configurazione salvata su GitHub.'))+' '+sync;
     $('newsletter-preview-frame').hidden=true;$('newsletter-preview-frame').removeAttribute('srcdoc');$('newsletter-preview-status').textContent='';renderNewsletter(true);
   }catch(e){if(session===model.session){n.conflict=[409,412].includes(e.status);n.error=n.conflict?'Conflitto di revisione: '+e.message+' Le modifiche non salvate sono conservate. Rileggi la configurazione prima di salvare.':e.message;}}
   finally{if(session===model.session){n.saving=false;newsletterStatus();}}
@@ -623,7 +623,7 @@ $('unlock-form').addEventListener('submit',async e=>{e.preventDefault();const b=
 function viewFromHash(){const view=location.hash.slice(1);return view==='agent-saved'?'agent':Object.hasOwn(labels,view)?view:null;}
 function closeNavigation(){if(window.matchMedia('(max-width:760px)').matches){$('career-navigation').classList.remove('nav-open');$('navigation-toggle').setAttribute('aria-expanded','false');$('navigation-toggle').setAttribute('aria-label','Apri menu');}}
 $('navigation-toggle').onclick=()=>{const open=$('career-navigation').classList.toggle('nav-open');$('navigation-toggle').setAttribute('aria-expanded',String(open));$('navigation-toggle').setAttribute('aria-label',open?'Chiudi menu':'Apri menu');};
-function selectView(view){if(!Object.hasOwn(labels,view))return;closeNavigation();model.view=view;model.page=0;if(!model.data)return;render();if(['agent','tracker'].includes(model.view)&&AgentSaved.available())loadAgentCollection();if(model.view==='newsletter'&&model.local&&!model.newsletter.loaded)loadNewsletterConfig();}
+function selectView(view){if(!Object.hasOwn(labels,view))return;closeNavigation();model.view=view;model.page=0;if(!model.data)return;render();if(['agent','tracker'].includes(model.view)&&AgentSaved.available())loadAgentCollection();if(model.view==='newsletter'&&canConfigure()&&!model.newsletter.loaded)loadNewsletterConfig();}
 document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{history.replaceState(null,'',location.pathname+location.search+'#'+b.dataset.view);selectView(b.dataset.view);}));
 window.addEventListener('hashchange',()=>selectView(viewFromHash()));
 $('agent-connect').onclick=()=>{const value=$('agent-token').value.trim();$('agent-token').value='';loadAgentCollection(value||undefined);};
@@ -642,8 +642,8 @@ $('settings').onclick=()=>{$('sync-dialog').showModal();};
 $('sync-now').onclick=async()=>{model.token=$('github-token').value.trim();$('github-token').value='';try{await githubSync();$('sync-message').textContent='Candidature, CV associati e lettere sincronizzati.';}catch(e){$('sync-message').textContent=e.message;}};
 $('export-state').onclick=async()=>saveBlob(JSON.stringify(await encrypt(model.checks)),'Career_Desk_Candidature.enc','application/json');
 $('import-state').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;const incoming=JSON.parse(dec.decode(await decrypt(JSON.parse(await file.text()))));model.checks=merge(model.checks,incoming);await persist();render();toast('Spunte importate');}catch{toast('File non valido o cifrato con un’altra password');}e.target.value='';};
-$('lock').onclick=async()=>{clearTimeout(saveTimer);await persist(false);await model.save;applicationCache=null;documentCache=null;model.session++;AgentSaved.lock();model.agentRows=[];$('agent-token').value='';$('agent-message').textContent='';$('count-agent').textContent='0';model.data=null;model.key=null;model.token='';model.checks={version:2,rows:{}};model.newsletter={draft:null,revision:'',loaded:false,dirty:false};$('newsletter-form').reset();$('newsletter-sections').replaceChildren();$('newsletter-preview-frame').removeAttribute('srcdoc');$('newsletter-preview-frame').hidden=true;$('workspace').hidden=true;$('rows').replaceChildren();$('detail-content').replaceChildren();$('linkedin-profile-panel').replaceChildren();$('parma-research-panel').replaceChildren();$('integrations-panel').replaceChildren();$('intelligence-panel').replaceChildren();$('connections-panel').replaceChildren();connectionsData=null;connectionsDirty=false;document.querySelectorAll('dialog').forEach(d=>d.close());$('login').hidden=false;};
-$('refresh').onclick=async()=>{if(model.view==='newsletter'&&model.local){await loadNewsletterConfig();return;}if(model.view==='agent'){await loadAgentCollection();return;}try{if(model.local){model.data=await readCatalog();model.checks=merge(model.data.state,model.checks);}else{model.config=await fetchJSON('config.json');model.data=await readCatalog();const shared=JSON.parse(dec.decode(await decrypt(await fetchJSON('state.enc'))));model.checks=merge(model.data.state,shared,model.checks);model.newsletter={draft:null,revision:'',loaded:false,dirty:false};$('newsletter-sections').replaceChildren();}render();toast('Dashboard aggiornata');}catch(e){toast(e.message);}};
+$('lock').onclick=async()=>{CareerCloud.lock();for(const input of document.querySelectorAll('#connections-panel input'))input.value='';$('connections-panel').replaceChildren();clearTimeout(saveTimer);await persist(false);await model.save;applicationCache=null;documentCache=null;model.session++;AgentSaved.lock();model.agentRows=[];$('agent-token').value='';$('agent-message').textContent='';$('count-agent').textContent='0';model.data=null;model.key=null;model.token='';model.checks={version:2,rows:{}};model.newsletter={draft:null,revision:'',loaded:false,dirty:false};$('newsletter-form').reset();$('newsletter-sections').replaceChildren();$('newsletter-preview-frame').removeAttribute('srcdoc');$('newsletter-preview-frame').hidden=true;$('workspace').hidden=true;$('rows').replaceChildren();$('detail-content').replaceChildren();$('linkedin-profile-panel').replaceChildren();$('parma-research-panel').replaceChildren();$('integrations-panel').replaceChildren();$('intelligence-panel').replaceChildren();$('connections-panel').replaceChildren();connectionsData=null;connectionsDirty=false;document.querySelectorAll('dialog').forEach(d=>d.close());$('login').hidden=false;};
+$('refresh').onclick=async()=>{if(model.view==='connections'&&canConfigure()){await loadConnections(true);return;}if(model.view==='integrations'&&!model.local&&CareerCloud.connected){try{await refreshIntegrationData();toast('Configurazione aggiornata');}catch(e){toast(e.message);}return;}if(model.view==='newsletter'&&canConfigure()){await loadNewsletterConfig();return;}if(model.view==='agent'){await loadAgentCollection();return;}try{if(model.local){model.data=await readCatalog();model.checks=merge(model.data.state,model.checks);}else{model.config=await fetchJSON('config.json');model.data=await readCatalog();const shared=JSON.parse(dec.decode(await decrypt(await fetchJSON('state.enc'))));model.checks=merge(model.data.state,shared,model.checks);model.newsletter={draft:null,revision:'',loaded:false,dirty:false};$('newsletter-sections').replaceChildren();if(CareerCloud.connected)connectionsData=await CareerCloud.load();}render();toast('Dashboard aggiornata');}catch(e){toast(e.message);}};
 $('run-all').onclick=()=>runReviews();$('publish').onclick=async()=>{try{toast('Pubblicazione in corso…');const result=await localAPI('publish',{});toast(result.message);}catch(e){toast(e.message);}};
 $('linkedin-login').onclick=async()=>{try{const result=await localAPI('linkedin-login',{});toast(result.message);}catch(e){toast(e.message);}};
 (async()=>{model.view=viewFromHash()||model.view;icons();try{if(location.hostname==='127.0.0.1'||location.hostname==='localhost'){const runtime=await localAPI('runtime');model.local=runtime.local;model.csrf=runtime.csrf;if(runtime.password){await unlock(runtime.password);return;}}}catch(e){console.warn('Local dashboard access failed:',e.name,e.message);$('login-error').textContent='Accesso locale non riuscito: '+e.message;}const params=new URLSearchParams(location.hash.slice(1));const password=params.get('key');if(password){history.replaceState(null,'',location.pathname+location.search);try{await unlock(password);}catch{$('login-error').textContent='Accesso automatico non riuscito.';}}})();

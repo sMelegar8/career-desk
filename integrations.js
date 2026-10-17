@@ -20,11 +20,11 @@ function integrationFilter(row){
 function integrationField(parent,label,value,type='text'){
   const wrapper=node('label',label),input=node('input');input.type=type;if(type==='checkbox')input.checked=!!value;else input.value=value??'';input.setAttribute('aria-label',label);wrapper.append(input);parent.append(wrapper);return input;
 }
-async function refreshIntegrationData(){const session=model.session;const data=await readCatalog();if(session!==model.session||!model.data)return;model.data=data;render();}
+async function refreshIntegrationData(){const session=model.session;if(!model.local&&CareerCloud.connected){const connections=await CareerCloud.load();if(session!==model.session||!model.data)return;connectionsData=connections;connectionsDirty=false;render();return;}const data=await readCatalog();if(session!==model.session||!model.data)return;model.data=data;render();}
 function renderIntegrations(){
   const root=$('integrations-panel');root.replaceChildren();const snapshot=model.data.integrations;
-  root.append(node('p',model.local?'Configura le fonti e importa gli alert ricevuti. La sincronizzazione automatica usa solo API pubbliche abilitate.':'Stato esportato dal PC. Configurazione, import e sincronizzazione manuale sono disponibili dal programma sul PC.','notice'));
-  if(!snapshot){root.append(node('p','Aggiorna il catalogo dal PC per visualizzare le integrazioni.'));return;}
+  root.append(node('p',canConfigure()?'Configura le fonti e importa gli alert ricevuti. La sincronizzazione automatica usa solo API pubbliche abilitate.':'Collega GitHub nella sezione Connessioni per configurare fonti, import e sincronizzazione anche da telefono. Qui trovi l’ultimo stato esportato.','notice'));
+  if(!snapshot){root.append(node('p','Apri Connessioni per caricare la configurazione delle integrazioni.'));return;}
   const draft=structuredClone(snapshot.config),message=node('p');message.setAttribute('role','status');root.append(message);
   const form=node('form'),grid=node('div',undefined,'integration-grid');form.append(grid);
   for(const connector of snapshot.connectors){
@@ -32,7 +32,7 @@ function renderIntegrations(){
     card.append(node('p',integrationStates[connector.status]||connector.status),node('p','Ultimo successo: '+(connector.last_success_at?new Date(connector.last_success_at).toLocaleString('it-IT'):'mai')));
     if(connector.last_error)card.append(node('p',connector.last_error,'form-error'));
     if(connector.evidence_url)card.append(safeLink(connector.evidence_url,'Info della fonte'));
-    if(model.local){
+    if(canConfigure()){
       const fields=node('fieldset');fields.append(node('legend','Configurazione '+connector.label));
       const enabled=integrationField(fields,'Abilita '+connector.label,config.enabled,'checkbox');enabled.onchange=()=>config.enabled=enabled.checked;
       const modeLabel=node('label','Modalità'),mode=node('select');for(const [id,label]of [['manual','Import manuale'],['email','Alert email ricevuti'],...(['greenhouse','lever'].includes(connector.platform)?[['api','API pubblica del datore']]:[])])mode.add(new Option(label,id));mode.value=config.mode;mode.onchange=()=>config.mode=mode.value;modeLabel.append(mode);fields.append(modeLabel);
@@ -43,12 +43,12 @@ function renderIntegrations(){
       const frequency=integrationField(fields,'Intervallo minimo (ore)',config.frequency_hours,'number');frequency.min='1';frequency.max='720';frequency.onchange=()=>config.frequency_hours=Number(frequency.value);
       const raw=integrationField(fields,'Conserva anche i dati originali dell’annuncio',config.retain_raw,'checkbox');raw.onchange=()=>config.retain_raw=raw.checked;card.append(fields);
       if(config.mode==='api'){
-        const sync=button('Sincronizza ora','refresh-cw',async()=>{sync.disabled=true;message.textContent='Sincronizzazione in corso…';try{const result=await localAPI('job-sync',{connector_id:connector.id});message.textContent=result.runs.some(r=>r.status==='degraded')?'Fonte non disponibile: dati precedenti conservati.':'Sincronizzazione completata.';await refreshIntegrationData();}catch(e){message.textContent=e.message;}finally{sync.disabled=false;}});sync.disabled=!config.enabled;card.append(sync);
+        const sync=button('Sincronizza ora','refresh-cw',async()=>{sync.disabled=true;message.textContent='Sincronizzazione in corso…';try{const result=await localAPI('job-sync',{connector_id:connector.id});message.textContent=result.runs?.some(r=>r.status==='degraded')?'Fonte non disponibile: dati precedenti conservati.':result.message||'Sincronizzazione completata.';await refreshIntegrationData();}catch(e){message.textContent=e.message;}finally{sync.disabled=false;}});sync.disabled=!config.enabled;card.append(sync);
       }
     }grid.append(card);
   }
   root.append(form);
-  if(model.local){
+  if(canConfigure()){
     const legacy=node('fieldset');legacy.append(node('legend','Fonti dello scouting già presente'));draft.legacy_sources=draft.legacy_sources||{};
     for(const [key,label]of [['linkedin','Ricerca LinkedIn esistente'],['adzuna','Adzuna (credenziali esistenti)'],['chiesi','Chiesi Careers'],['smartrecruiters','SmartRecruiters'],['randstad','Ricerca Randstad esistente']]){const input=integrationField(legacy,label,draft.legacy_sources[key]!==false,'checkbox');input.onchange=()=>draft.legacy_sources[key]=input.checked;}form.prepend(legacy);
     form.prepend(node('p','Le schede configurano import e nuove API. I controlli seguenti governano i collector già presenti; disabilitarli interrompe nuove ricerche e conserva il catalogo.'));
