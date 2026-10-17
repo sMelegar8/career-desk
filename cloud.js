@@ -35,7 +35,7 @@ const CareerCloud=(()=>{
         for(const field of ['description','company','title','location','source_references','profile_matches','salary','job_status','registry_lifecycle_status','relevance_feedback','archived','vacancy_status','history'])if(Object.hasOwn(row,field))old[field]=row[field];
         if(moved)for(const field of ['distance_from_parma_km','distance_band','distance_label','location_verification'])old[field]=row[field]??null;
         if(changed){old.complete=row.complete;old.description_verified=row.description_verified;old.posting=null;old.review_status=row.review_status;old.profile_matches=row.profile_matches||{profiles:[]};}
-        if(moved||changed||row.archived||row.relevance_feedback==='dismissed')old.fit={score:null,application_tier:'insufficient_information'};
+        if(moved||changed||row.archived||row.relevance_feedback==='dismissed')old.fit=row.archived||row.relevance_feedback==='dismissed'?{score:null,application_tier:'insufficient_information'}:row.fit||{score:null,application_tier:'insufficient_information'};
       }
       else{model.data.jobs.push(row);existing.set(key,row);}
     }
