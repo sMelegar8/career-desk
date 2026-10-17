@@ -3,7 +3,7 @@ function canConfigure(){return model.local||CareerCloud.connected;}
 const CareerCloud=(()=>{
   const repository='sMelegar8/Auto-LinkdIn-v2.0',prefix='https://api.github.com/repos/'+repository;
   const aad=new TextEncoder().encode('CareerDesk/cloud-command/v1');
-  let token='',config=null,epoch=0,lastStatus=null;
+  let token='',config=null,epoch=0,lastStatus=null,statusEtag='';
   const oauthStates=new Map();
   const encode=value=>new TextEncoder().encode(value),decode=value=>new TextDecoder().decode(value);
   function bytes(value){return Uint8Array.from(atob(value),c=>c.charCodeAt(0));}
@@ -20,9 +20,12 @@ const CareerCloud=(()=>{
   }
   async function api(path,options={}){
     if(!token)throw new Error('Collega GitHub per gestire la configurazione.');
-    const current=epoch,response=await fetch(prefix+path,{cache:'no-store',redirect:'error',...options,headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','Content-Type':'application/json',...options.headers}});
+    const statusRequest=path.startsWith('/contents/data/career_cloud_status.json?'),current=epoch;
+    const response=await fetch(prefix+path,{cache:'no-store',redirect:'error',...options,headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','Content-Type':'application/json',...(statusRequest&&lastStatus&&statusEtag?{'If-None-Match':statusEtag}:{}),...options.headers}});
     if(current!==epoch)throw new Error('Sessione GitHub chiusa.');
+    if(statusRequest&&response.status===304&&lastStatus)return lastStatus;
     if(!response.ok)throw new Error(response.status===401?'Token GitHub scaduto o non valido.':response.status===403?'Accesso GitHub negato: servono Contents e Actions in lettura/scrittura.':'Operazione GitHub non riuscita ('+response.status+').');
+    if(statusRequest)statusEtag=response.headers.get('etag')||'';
     return response.status===204?{}:response.json();
   }
   function mergeOverlay(rows){
@@ -108,6 +111,6 @@ const CareerCloud=(()=>{
     form.onsubmit=async event=>{event.preventDefault();const value=input.value.trim();input.value='';submit.disabled=true;message.textContent='Verifica accesso GitHub…';try{await configuration();token=value;const metadata=await api('');if(metadata.private!==true||metadata.full_name.toLowerCase()!==repository.toLowerCase()||!metadata.permissions?.push)throw new Error('Serve accesso in scrittura al repository privato Career Desk.');await api('/actions/workflows/connections.yml');connectionsData=await load();connectionsDirty=false;render();}catch(error){lock();message.textContent=error.message;}finally{submit.disabled=false;}};
     section.append(form,message);root.append(section);
   }
-  function lock(){token='';epoch++;lastStatus=null;oauthStates.clear();}
+  function lock(){token='';epoch++;lastStatus=null;statusEtag='';oauthStates.clear();}
   return {get connected(){return !!token;},load,request,authorize,authorizeDevice,renderAccess,lock};
 })();
