@@ -293,7 +293,7 @@ function render(){
   if(model.view==='agent')$('view-subtitle').textContent='Pacchetti conservati tramite Mi interessa: accesso privato e verifica prima dell\'invio';
   if(impact)$('view-subtitle').textContent='Dati verificabili per riscrivere i CV con risultati concreti';
   if(tracker)$('view-subtitle').textContent='Registro manuale delle candidature. Nessun invio dalla dashboard.';
-  if(newsletter)$('view-subtitle').textContent=canConfigure()?'Configurazione del prossimo ciclo; nessuna email inviata al salvataggio.':'Collega GitHub in Connessioni per modificare la newsletter.';
+  if(newsletter)$('view-subtitle').textContent=canConfigure()?'Configurazione del prossimo ciclo; nessuna email inviata al salvataggio.':'Newsletter in sola lettura. Collega GitHub in Connessioni per modificarla.';
   if(linkedin)$('view-subtitle').textContent='';
   if(parma)$('view-subtitle').textContent='Nove aziende, priorità motivate e stato verificato al 14 ottobre 2026.';
   $('updated').textContent='Aggiornato '+new Date(model.data.updated_at).toLocaleDateString('it-IT');
@@ -457,7 +457,7 @@ function newsletterResponse(result){
 }
 function newsletterStatus(){
   const n=model.newsletter;
-  $('newsletter-mode').textContent=model.local?'PC locale: le modifiche salvate valgono dal prossimo ciclo.':canConfigure()?'GitHub Actions: modifica la newsletter da telefono; il PC può restare spento. L’anteprima è disponibile nella versione locale.':'Collega GitHub in Connessioni per modificare la newsletter da web o telefono.';
+  $('newsletter-mode').textContent=model.local?'PC locale: le modifiche salvate valgono dal prossimo ciclo.':canConfigure()?'GitHub Actions: modifica la newsletter da telefono; il PC può restare spento. L’anteprima è disponibile nella versione locale.':'Newsletter in sola lettura. Collega GitHub in Connessioni per modificarla da web o telefono.';
   $('newsletter-status').textContent=n.loading?'Lettura configurazione...':n.saving?'Salvataggio configurazione...':n.message||(n.dirty?'Modifiche non salvate':n.draft?'Configurazione '+(model.local?'letta dal PC':canConfigure()?'letta da GitHub':'esportata'):'Nessuna configurazione esportata disponibile.');
   $('newsletter-error').textContent=n.error||'';
   $('newsletter-fields').disabled=!canConfigure()||!n.loaded||n.loading||n.saving;

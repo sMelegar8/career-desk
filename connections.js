@@ -1,5 +1,5 @@
 'use strict';
-let connectionsData=null,connectionsLoad=null,connectionsDirty=false;
+let connectionsData=null,connectionsLoad=null,connectionsDirty=false,connectionsChecklistOpen=null;
 const connectionLabels={connected:'Accesso verificato',needs_authorization:'Consenso da completare',error:'Da verificare',disabled:'Disattivato',verified:'Verificato',ready:'Pronto da verificare',todo:'Da fare',missing:'Da configurare',environment:'Credenziali ambiente · da verificare',vault_unavailable:'Archivio credenziali non disponibile'};
 const connectionDate=value=>value?new Date(value).toLocaleString('it-IT'):'mai';
 function connectionStatus(value){return connectionLabels[value]||value||'Da configurare';}
@@ -50,7 +50,7 @@ function renderConnections(){
       if(row.setup_url)card.append(safeLink(row.setup_url,'Apri sito / istruzioni '+row.label));
       grid.append(card);
     }
-    form.append(grid);const save=node('button','Salva checklist e monitor','primary');save.type='submit';form.append(save);form.onsubmit=e=>{e.preventDefault();connectionAction({action:'settings',settings:draft,expected_revision:data.revision},message,save);};monitor.append(form);
+    const checklist=node('details',undefined,'connection-checklist');checklist.open=connectionsChecklistOpen??window.matchMedia('(min-width:760px)').matches;checklist.append(node('summary','Checklist collegamenti · '+data.checklist.filter(row=>row.verified).length+' di '+data.checklist.length+' verificati'),grid);checklist.ontoggle=()=>{connectionsChecklistOpen=checklist.open;};form.append(checklist);const save=node('button','Salva checklist e monitor','primary');save.type='submit';form.append(save);form.onsubmit=e=>{e.preventDefault();connectionAction({action:'settings',settings:draft,expected_revision:data.revision},message,save);};monitor.append(form);
     monitor.append(button('Controlla connessioni ora','refresh-cw',()=>connectionAction({action:'scan'},message)));
     monitor.append(button('Configura fonti e board API','plug',()=>{history.replaceState(null,'','#integrations');selectView('integrations');}));
     monitor.append(button('Preferenze newsletter','mail',()=>{history.replaceState(null,'','#newsletter');selectView('newsletter');}));
@@ -65,7 +65,7 @@ function renderConnections(){
   if(editable){
     const details=node('details');details.append(node('summary','Aggiungi o aggiorna una casella'));const form=node('form');form.id='mail-account-form';form.dataset.connectionForm='true';
     const provider=connectionSelect(form,'Provider',[['gmail','Gmail'],['microsoft','Outlook / Microsoft 365'],['icloud','iCloud'],['yahoo','Yahoo']],'gmail');
-    const id=connectionInput(form,'Nome connessione (lettere minuscole, numeri e trattini)','gmail-personale');id.required=true;id.pattern='[a-z0-9_-]{1,60}';
+    const id=connectionInput(form,'Nome connessione (lettere minuscole, numeri e trattini)','gmail-personale');id.required=true;id.pattern='[a-z][a-z0-9_-]{0,47}';
     const email=connectionInput(form,'Indirizzo email','','email');email.required=true;
     const folder=connectionInput(form,'Cartella / etichetta alert','CareerDesk/Alerts');folder.required=true;
     const mode=connectionSelect(form,'Metodo accesso',[['imap','Password per app (Gmail, iCloud, Yahoo)'],['oauth','Login Google / Microsoft (OAuth)']],'imap');
