@@ -9,7 +9,7 @@ const applicationStages = ['applied','interview','offer','rejected','withdrawn']
 const newsletterAreas = ['R&D','Project Management','Software Development','Chimica e laboratorio','Data Analysis e Data Engineering','AI e LLM','Qualita e Compliance','Altre opportunita'];
 const newsletterNumbers = {max_jobs:[1,100],max_per_section:[1,50],min_score:[0,100]};
 const newsletterToggles = ['include_bridge','show_summary','show_distance_summary','show_strengths','show_gaps'];
-const statuses = {not_started:'Da analizzare',running:'Analisi in corso',awaiting_visual_review:'Verifica visiva',ready:'CV verificato',needs_correction:'Da correggere',needs_attention:'Da verificare',waiting_local_ai:'AI locale in attesa',waiting_local_resources:'In attesa di memoria',resource_deferred:'In attesa di memoria',failed:'Da riprovare',interrupted:'Da riprendere',service_paused:'AI locale da verificare',budget_paused:'Vecchio ciclo sospeso',incomplete_posting:'Testo incompleto'};
+const statuses = {not_started:'Da analizzare',running:'Analisi in corso',awaiting_visual_review:'Verifica visiva',ready:'CV verificato',needs_correction:'Da correggere',needs_attention:'Da verificare',waiting_claude:'Claude in attesa (accesso o limite abbonamento)',waiting_local_ai:'AI locale in attesa',waiting_local_resources:'In attesa di memoria',resource_deferred:'In attesa di memoria',failed:'Da riprovare',interrupted:'Da riprendere',service_paused:'Claude da verificare',budget_paused:'Vecchio ciclo sospeso',incomplete_posting:'Testo incompleto'};
 const unb64 = text => Uint8Array.from(atob(text), c=>c.charCodeAt(0));
 function b64(bytes){let text='';for(let i=0;i<bytes.length;i+=16384)text+=String.fromCharCode(...bytes.subarray(i,i+16384));return btoa(text);}
 function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
@@ -245,9 +245,9 @@ function renderMetrics(){
     $('metric-sent').textContent=model.agentRows.filter(r=>applicationState(r).checked).length;
     $('metric-review').textContent=model.agentRows.filter(r=>r.ai_reviewed).length;
   }
-  $('budget-info').textContent='AI locale · API a pagamento disabilitate';
+  $('budget-info').textContent='Claude · abbonamento, nessuna API a consumo';
   renderSystem(d.system);
-  $('budget-info').title='Ollama sul PC, senza fallback a provider a pagamento';
+  $('budget-info').title='Claude Code sul PC con il token dell’abbonamento; chiavi API escluse';
 }
 function allRows(){const d=model.data;switch(model.view){case'tracker':return applicationRows().filter(r=>tracked(r));case'agent':return model.agentRows;case'saved':return d.jobs.filter(j=>j.saved);case'companies':return d.companies;case'documents':return d.documents.map(doc=>({id:'cv:'+doc.id,cv_id:doc.id,name:doc.folder,role:doc.group,kind:'document',cv_ready:doc.ready}));case'reviews':return [...d.companies.filter(c=>c.review),...d.jobs.filter(j=>j.complete)];default:return d.jobs;}}
 const fitLabels={apply_now:'Candidatura diretta',bridge:'Ruolo affine con gap',insufficient_information:'Da verificare',not_aligned:'Non allineato'};
@@ -618,7 +618,7 @@ async function githubSync(){
     localStorage.setItem(storageKey(),JSON.stringify(encrypted));render();$('sync-status').textContent='Sincronizzato con GitHub';return;
   }throw new Error('Conflitto di sincronizzazione: riprova');
 }
-async function runReviews(ids=[]){if(!model.local)return;const text=ids.length?'Accodare la revisione di questo annuncio?':'Accodare le revisioni mancanti di tutti gli annunci completi?';if(!confirm(text+' AI locale: nessuna API a pagamento. Pubblicazione su Drive solo dopo tutti i controlli. Non invia candidature.'))return;try{const r=await localAPI('review',{ids});toast(r.message);}catch(e){toast(e.message);}}
+async function runReviews(ids=[]){if(!model.local)return;const text=ids.length?'Accodare la revisione di questo annuncio?':'Accodare le revisioni mancanti di tutti gli annunci completi?';if(!confirm(text+' Claude con il tuo abbonamento (consuma i limiti del piano), nessuna API a consumo. Pubblicazione su Drive solo dopo tutti i controlli. Non invia candidature.'))return;try{const r=await localAPI('review',{ids});toast(r.message);}catch(e){toast(e.message);}}
 $('unlock-form').addEventListener('submit',async e=>{e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;$('login-error').textContent='';try{await unlock($('password').value);}catch{$('login-error').textContent='Accesso non riuscito. Controlla password e connessione.';model.key=null;}finally{b.disabled=false;}});
 function viewFromHash(){const view=location.hash.slice(1);return view==='agent-saved'?'agent':Object.hasOwn(labels,view)?view:null;}
 function closeNavigation(){if(window.matchMedia('(max-width:760px)').matches){$('career-navigation').classList.remove('nav-open');$('navigation-toggle').setAttribute('aria-expanded','false');$('navigation-toggle').setAttribute('aria-label','Apri menu');}}
