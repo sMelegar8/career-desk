@@ -4,8 +4,8 @@ const enc = new TextEncoder(), dec = new TextDecoder();
 const AAD = enc.encode('career-desk-v1');
 const model = {data:null,key:null,config:null,checks:{version:2,rows:{}},view:'saved',page:0,local:false,csrf:'',token:'',save:Promise.resolve(),agentRows:[],session:0,newsletter:{draft:null,revision:'',loaded:false,dirty:false}};
 const labels = {notifications:'Notifiche candidature',connections:'Connessioni e configurazione',integrations:'Integrazioni',intelligence:'Job Intelligence','parma-research':'Parma · opportunità ottobre 2026',saved:'Salvati LinkedIn',agent:'Salvati da AI Job Agent',tracker:'Tracker candidature',newsletter:'Newsletter / Brief',jobs:'Tutti gli annunci',companies:'Aziende e recruiter',documents:'Libreria CV',reviews:'Revisioni ATS','linkedin-profile':'Profilo LinkedIn',impact:'Impatto CV'};
-const stages = {planned:'Da valutare',interested:'Mi interessa',applied:'Inviata',interview:'Colloquio',offer:'Offerta',rejected:'Esito negativo',withdrawn:'Ritirata'};
-const applicationStages = ['applied','interview','offer','rejected','withdrawn'];
+const stages = {planned:'Da valutare',interested:'Mi interessa',drafted:'Bozza non inviata',applied:'Inviata',interview:'Colloquio',offer:'Offerta',hired:'Assunto',rejected:'Esito negativo',withdrawn:'Ritirata',no_response:'Chiusa: nessuna risposta',offer_declined:'Offerta rifiutata'};
+const applicationStages = ['applied','interview','offer','hired','rejected','withdrawn','no_response','offer_declined'];
 const newsletterAreas = ['R&D','Project Management','Software Development','Chimica e laboratorio','Data Analysis e Data Engineering','AI e LLM','Qualita e Compliance','Altre opportunita'];
 const newsletterNumbers = {max_jobs:[1,100],max_per_section:[1,50],min_score:[0,100]};
 const newsletterToggles = ['include_bridge','show_summary','show_distance_summary','show_strengths','show_gaps'];
@@ -34,6 +34,11 @@ function merge(...states){
     const previous=out.rows[id];
     // Older clients omit new fields; an explicit empty string still clears a field.
     out.rows[id]=!previous||Date.parse(clean.updatedAt)>=Date.parse(previous.updatedAt)?{...previous,...clean}:{...clean,...previous};
+    if(Array.isArray(previous?.activity_events)||Array.isArray(row.activity_events)){
+      const events=new Map();
+      for(const event of [...previous?.activity_events||[],...row.activity_events||[]])if(event&&/^[A-Za-z0-9_:-]{1,160}$/.test(event.id)&&['applied','interview','hired','rejected','no_response','offer_declined','withdrawn','offer','assessment','reply','action_required','followup_sent','tracker_update'].includes(event.kind)&&['manual','application-email','claude-gmail-inbox','tracker'].includes(event.source)&&Number.isFinite(Date.parse(event.at)))events.set(event.id,{id:event.id,kind:event.kind,at:new Date(event.at).toISOString(),source:event.source});
+      out.rows[id].activity_events=[...events.values()].sort((a,b)=>a.at.localeCompare(b.at)||a.id.localeCompare(b.id)).slice(-200);
+    }
     if(previous?.base_cv_override_at&&(!clean.base_cv_override_at||Date.parse(previous.base_cv_override_at)>Date.parse(clean.base_cv_override_at))){out.rows[id].base_cv_override=previous.base_cv_override;out.rows[id].base_cv_override_at=previous.base_cv_override_at;}
   }
   return out;
@@ -56,7 +61,7 @@ function applicationRows(){
     else grouped.set(identity,{...row,state_ids:[row.id],sources:[row.kind]});
   }
   const known=new Set([...grouped.values()].flatMap(r=>r.state_ids));
-  for(const [id,state]of Object.entries(model.checks.rows))if(!known.has(id)&&!id.startsWith('impact:')&&!id.startsWith('cv:')&&(state.checked||applicationStages.includes(state.stage)||state.stage==='interested'||state.matched_cv_id))grouped.set('archived:'+id,{id,kind:'archived',name:'Record archiviato',role:id,state_ids:[id],sources:['archived']});
+  for(const [id,state]of Object.entries(model.checks.rows))if(!known.has(id)&&!id.startsWith('impact:')&&!id.startsWith('cv:')&&(state.checked||applicationStages.includes(state.stage)||['interested','drafted'].includes(state.stage)||state.matched_cv_id))grouped.set('archived:'+id,{id,kind:'archived',name:'Record archiviato',role:id,state_ids:[id],sources:['archived']});
   const rows=[...grouped.values()],byId=new Map();
   for(const row of rows)for(const id of row.state_ids)byId.set(id,row);
   applicationCache={data:model.data,agents:model.agentRows,checks:model.checks,rows,byId,states:new Map()};
@@ -282,7 +287,7 @@ function renderMetrics(){
   $('budget-info').title='Claude Code sul PC con il token dell’abbonamento; chiavi API escluse';
 }
 function allRows(){const d=model.data;switch(model.view){case'tracker':return applicationRows().filter(r=>tracked(r));case'agent':return model.agentRows;case'saved':return d.jobs.filter(j=>j.saved);case'companies':return d.companies;case'documents':return d.documents.map(doc=>({id:'cv:'+doc.id,cv_id:doc.id,name:doc.folder,role:doc.group,kind:'document',cv_ready:doc.ready}));case'reviews':return [...d.companies.filter(c=>c.review),...d.jobs.filter(j=>j.complete)];default:return d.jobs;}}
-const fitLabels={apply_now:'Candidatura diretta',bridge:'Ruolo affine con gap',insufficient_information:'Da verificare',not_aligned:'Non allineato'};
+const fitLabels={apply_now:'Candidatura diretta',bridge:'Ruolo affine con gap',insufficient_information:'Da verificare',not_aligned:'Non allineato',gate_failed:'Requisito linguistico o professionale non soddisfatto'};
 function alignmentScore(row){const selected=applicationState(row).matched_cv_id;if(selected&&typeof CareerMatching!=='undefined'&&model.data?.documents){const doc=getDoc(row);if(doc)return CareerMatching.evaluate(row,doc).score;}const score=row.fit?.score;return typeof score==='number'&&Number.isFinite(score)&&score>=0&&score<=100?score:null;}
 function compareRows(a,b,order){
   const missingLast=(x,y,direction=1)=>x===null?(y===null?0:1):y===null?-1:direction*(x-y);
@@ -307,7 +312,7 @@ function visibleRows(){const q=$('search').value.toLocaleLowerCase('it'),area=$(
   if(q&&!`${r.company||r.name} ${r.title||r.role} ${r.location||r.place} ${r.activity||''} ${r.description||''} ${model.view==='tracker'?[state.channel,state.cv_version,state.note,state.outcome].join(' '):''}`.toLocaleLowerCase('it').includes(q))return false;
   if(area&&!`${r.location||r.place||''} ${r.g||''}`.toLowerCase().includes(area))return false;
   const checked=!!state.checked;
-  if(model.view==='tracker'){const stage=$('tracker-stage').value;return !stage||(stage==='sent'?checked:stage==='due'?isFollowUpDue(r):applicationStage(r)===stage);}
+  if(model.view==='tracker'){const stage=$('tracker-stage').value;return !stage||(stage==='sent'?checked:stage==='due'?isFollowUpDue(r):stage==='stale'?CareerActions.quietSummary(state).stale:applicationStage(r)===stage);}
   return !(status==='sent'&&!checked||status==='unsent'&&checked||status==='ready'&&!(state.matched_cv_id?getDoc(r)?.ready:r.cv_ready)||status==='complete'&&!r.complete||status==='incomplete'&&(r.complete||r.kind!=='job'));
 }).sort((a,b)=>compareRows(a,b,$('sort-order').value));}
 function render(){
@@ -351,6 +356,7 @@ function render(){
       main.append(summary);if(state.matched_cv_id)main.append(node('div','CV associato: '+(getDoc(row)?.folder||'non disponibile'),'subline'));
     }
     if(row.kind==='job'){
+      CareerActions.badges(main,row);
       const base=baseCVInfo(row);main.append(node('div',base.label+(base.override?' · Scelta manuale':''),'subline'));
       main.append(node('div',row.saved?'Salvato LinkedIn':'Ricerca archiviata','subline'));
       const observed=row.first_seen_at||row.captured_at;
@@ -392,7 +398,7 @@ function stageSelect(row){
   const select=node('select');select.setAttribute('aria-label','Fase candidatura '+(row.company||row.name));
   for(const [value,text]of Object.entries(stages)){const option=node('option',text);option.value=value;select.append(option);}
   select.value=applicationStage(row);
-  select.onchange=()=>setApplicationRow(row,{stage:select.value,...(['applied','interview','offer','rejected'].includes(select.value)?{checked:true}:{})});
+  select.onchange=()=>setApplicationRow(row,{stage:select.value,checked:applicationStages.includes(select.value)});
   return select;
 }
 function applicationFields(parent,row,doc){
@@ -409,13 +415,13 @@ function applicationFields(parent,row,doc){
   if(doc?.files?.pdf?.sha256)s.append(button('Registra questo CV','file-check',()=>{setApplicationRow(row,{cv_sha256:doc.files.pdf.sha256,cv_version:doc.files.pdf.name||doc.folder||''});grid.querySelector('input[aria-label="Versione CV"]').value=applicationState(row).cv_version;grid.querySelector('input[aria-label="Hash CV (SHA256)"]').value=applicationState(row).cv_sha256;}));
   const notes=node('label','Note personali','application-notes'),area=node('textarea');area.value=state.note||'';area.maxLength=8000;area.rows=4;area.setAttribute('aria-label','Note personali');area.oninput=()=>setApplicationRow(row,{note:area.value});notes.append(area);s.append(notes);
 }
-function tracked(row){const state=applicationState(row);return !!(state.checked||applicationStages.includes(state.stage)||state.stage==='interested'||state.matched_cv_id);}
+function tracked(row){const state=applicationState(row);return !!(state.checked||applicationStages.includes(state.stage)||['interested','drafted'].includes(state.stage)||state.matched_cv_id);}
 function todayISO(){const now=new Date();return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;}
-function isFollowUpDue(row){const state=applicationState(row);return !!(state.follow_up&&state.follow_up<=todayISO()&&!['rejected','withdrawn','offer'].includes(applicationStage(row)));}
+function isFollowUpDue(row){const state=applicationState(row);return CareerActions.quietSummary(state).needs_followup||!!(state.follow_up&&state.follow_up<=todayISO()&&['applied','interview'].includes(applicationStage(row)));}
 function renderTrackerSummary(visible){
   let root=$('tracker-summary');if(!root){root=node('section',undefined,'tracker-summary');root.id='tracker-summary';root.setAttribute('aria-label','Avanzamento candidature');document.querySelector('.search').before(root);}root.hidden=!visible;if(!visible)return;
   root.replaceChildren();const rows=applicationRows().filter(tracked),counts=new Map();for(const row of rows){const stage=applicationStage(row);counts.set(stage,(counts.get(stage)||0)+1);}
-  for(const [value,label]of [['','Tutte'],['interested','Da preparare'],['applied','Inviate'],['interview','Colloqui'],['offer','Offerte'],['due','Follow-up']]){const count=value==='due'?rows.filter(isFollowUpDue).length:value?counts.get(value)||0:rows.length;const b=button('',null,()=>{$('tracker-stage').value=value;model.page=0;render();},'tracker-stat');b.append(node('strong',String(count)),node('span',label));b.setAttribute('aria-pressed',String($('tracker-stage').value===value));root.append(b);}
+  for(const [value,label]of [['','Tutte'],['interested','Da preparare'],['applied','Inviate'],['interview','Colloqui'],['offer','Offerte'],['due','Da sollecitare'],['stale','Ferme da 60+ giorni']]){const count=value==='due'?rows.filter(isFollowUpDue).length:value==='stale'?rows.filter(row=>CareerActions.quietSummary(applicationState(row)).stale).length:value?counts.get(value)||0:rows.length;const b=button('',null,()=>{$('tracker-stage').value=value;model.page=0;render();},'tracker-stat');b.append(node('strong',String(count)),node('span',label));b.setAttribute('aria-pressed',String($('tracker-stage').value===value));root.append(b);}
 }
 function renderWorkbench(parent,row){
   const s=section(parent,'Prepara la candidatura');s.classList.add('application-workbench');
@@ -582,6 +588,8 @@ function showDetail(row){
   else if(row.kind==='job')actions.append(node('span','Sito aziendale da verificare','muted'));
   root.append(actions);
   baseCVChoice(root,row);
+  for(const item of CareerActions.gateNotes(row)){const s=section(root,item.label+' · '+item.verdict);s.append(node('p',item.reason||''),node('blockquote',item.quote));}
+  CareerActions.renderDocuments(root,row);
   if(model.view==='tracker'&&row.kind!=='document')applicationFields(root,row,doc);
   if(row.draft&&model.local){const s=section(root,'Bozza da verificare');s.append(button('Controlla le due pagine','eye',()=>showPreview(row,s)));}
   if(row.kind==='job'){renderJobSourceDetails(root,row);renderWorkbench(root,row);}
@@ -663,6 +671,7 @@ let filterTimer;
 for(const id of ['search','area','status','distance','tracker-stage','fit-min','fit-tier','sort-order'])$(id).addEventListener(['search','fit-min'].includes(id)?'input':'change',()=>{model.page=0;clearTimeout(filterTimer);if(['search','fit-min'].includes(id))filterTimer=setTimeout(render,120);else render();});
 {const option=node('option','Confronto CV associato');option.value='cv_comparison';$('fit-tier').append(option);}
 {const option=node('option','Follow-up da fare');option.value='due';$('tracker-stage').append(option);}
+{const option=node('option','Ferme da 60+ giorni');option.value='stale';$('tracker-stage').append(option);}
 for(const [value,text]of Object.entries(stages)){const option=node('option',text);option.value=value;$('tracker-stage').append(option);}
 $('newsletter-grouping').onchange=e=>{model.newsletter.draft.grouping=e.target.value;markNewsletterDirty();};
 for(const key of Object.keys(newsletterNumbers))$('newsletter-'+key).oninput=e=>{model.newsletter.draft[key]=e.target.value===''?null:Number(e.target.value);markNewsletterDirty();};

@@ -39,6 +39,7 @@ const CareerCloud=(()=>{
         if(moved)for(const field of ['distance_from_parma_km','distance_band','distance_label','location_verification'])old[field]=row[field]??null;
         if(changed){old.complete=row.complete;old.description_verified=row.description_verified;old.posting=null;old.review_status=row.review_status;old.profile_matches=row.profile_matches||{profiles:[]};}
         if(moved||changed||row.archived||row.relevance_feedback==='dismissed')old.fit=row.archived||row.relevance_feedback==='dismissed'?{score:null,application_tier:'insufficient_information'}:row.fit||{score:null,application_tier:'insufficient_information'};
+        if(moved||changed||row.gates||row.fit?.gates)old.gates=row.gates||row.fit?.gates||{};
       }
       else{model.data.jobs.push(row);existing.set(key,row);}
     }
@@ -71,7 +72,7 @@ const CareerCloud=(()=>{
     return {version:1,key_id:settings.key_id,wrapped_key:base64(new Uint8Array(wrapped)),iv:base64(iv),data:base64(new Uint8Array(ciphertext))};
   }
   async function request(route,body){
-    if(!['connections','job-integrations','job-import','job-sync','job-feedback','newsletter-config','application-mail'].includes(route))throw new Error('Questa operazione richiede il programma sul PC.');
+    if(!['connections','job-integrations','job-import','job-sync','job-feedback','newsletter-config','application-mail','career-request'].includes(route))throw new Error('Questa operazione richiede il programma sul PC.');
     if(body===undefined){await load();return route==='connections'?lastStatus.connections:route==='job-integrations'?lastStatus.integrations:route==='newsletter-config'?lastStatus.newsletter:route==='application-mail'?lastStatus.application_mail||{version:1,jobs:[],state:{version:2,rows:{}},notifications:[]}:{};}
     const current=epoch,id=crypto.randomUUID(),envelope=await encryptedRequest(route,body,id);
     await api('/contents/data/career_cloud_requests/'+id+'.json',{method:'PUT',body:JSON.stringify({branch:'main',message:'Queue encrypted Career Desk configuration [skip ci]',content:base64(encode(JSON.stringify(envelope)))})});
