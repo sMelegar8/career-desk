@@ -59,5 +59,13 @@ window.AgentSaved = (() => {
       body:JSON.stringify({ref:'main',inputs:{job_id:String(job_id)}})});
     if(!response.ok)throw new Error('Richiesta non accodata: verifica il permesso Actions: write sul repository privato.');
   }
-  return {load,file,queueCV,lock(){token='';},available(){return local()||!!token;}};
+  async function queueBaseCV(job_id,base_id){
+    if(!Number.isInteger(base_id)||base_id<1||base_id>4)throw new Error('Scegli un CV da 1 a 4.');
+    if(!token)throw new Error('Collega il repository privato con un token Actions: write per salvare la scelta dal telefono.');
+    const response=await fetch(base+'/actions/workflows/generate-application.yml/dispatches',{
+      method:'POST',headers:{Accept:'application/vnd.github+json',Authorization:'Bearer '+token,'Content-Type':'application/json'},
+      body:JSON.stringify({ref:'main',inputs:{job_id:String(job_id),base_cv:String(base_id)}})});
+    if(!response.ok)throw new Error('Scelta non accodata: verifica il permesso Actions: write sul repository privato.');
+  }
+  return {load,file,queueCV,queueBaseCV,lock(){token='';},available(){return local()||!!token;}};
 })();

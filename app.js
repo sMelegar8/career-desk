@@ -9,7 +9,9 @@ const applicationStages = ['applied','interview','offer','rejected','withdrawn']
 const newsletterAreas = ['R&D','Project Management','Software Development','Chimica e laboratorio','Data Analysis e Data Engineering','AI e LLM','Qualita e Compliance','Altre opportunita'];
 const newsletterNumbers = {max_jobs:[1,100],max_per_section:[1,50],min_score:[0,100]};
 const newsletterToggles = ['include_bridge','show_summary','show_distance_summary','show_strengths','show_gaps'];
-const statuses = {not_started:'Da analizzare',running:'Analisi in corso',awaiting_visual_review:'Verifica visiva',ready:'CV verificato',needs_correction:'Da correggere',needs_attention:'Da verificare',waiting_claude:'Claude in attesa (accesso o limite abbonamento)',waiting_local_ai:'AI locale in attesa',waiting_local_resources:'In attesa di memoria',resource_deferred:'In attesa di memoria',failed:'Da riprovare',interrupted:'Da riprendere',service_paused:'Claude da verificare',budget_paused:'Vecchio ciclo sospeso',incomplete_posting:'Testo incompleto'};
+const statuses = {cv_generation_paused:'Generazione CV in pausa',not_started:'Da analizzare',running:'Analisi in corso',awaiting_visual_review:'Verifica visiva',ready:'CV verificato',needs_correction:'Da correggere',needs_attention:'Da verificare',waiting_claude:'Claude in attesa (accesso o limite abbonamento)',waiting_local_ai:'AI locale in attesa',waiting_local_resources:'In attesa di memoria',resource_deferred:'In attesa di memoria',failed:'Da riprovare',interrupted:'Da riprendere',service_paused:'Claude da verificare',budget_paused:'Vecchio ciclo sospeso',incomplete_posting:'Testo incompleto'};
+Object.assign(statuses,{cv_da_scegliere:'CV da scegliere',base_cv_pending:'CV base da consegnare',replaced_by_base_cv:'Sostituito da CV base'});
+const baseCVLabels={1:'Dati e digitalizzazione R&D',2:'Software scientifico e AI',3:'Processi e materiali R&D',4:'Progetti R&D'};
 const unb64 = text => Uint8Array.from(atob(text), c=>c.charCodeAt(0));
 function b64(bytes){let text='';for(let i=0;i<bytes.length;i+=16384)text+=String.fromCharCode(...bytes.subarray(i,i+16384));return btoa(text);}
 function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
@@ -28,9 +30,11 @@ function merge(...states){
     if(!row||typeof row.checked!=='boolean'||!Number.isFinite(Date.parse(row.updatedAt))||['__proto__','constructor','prototype'].includes(id))continue;
     const clean={checked:row.checked,updatedAt:row.updatedAt};
     for(const field of ['note','stage','deadline','submitted_on','follow_up','channel','cv_version','cv_sha256','outcome','matched_cv_id','matched_cv_sha256','cover_letter','cover_letter_language','cover_letter_cv_sha256','recruiter','interview_on'])if(Object.hasOwn(row,field))clean[field]=String(row[field]??'').slice(0,field==='cover_letter'?16000:field==='note'?8000:512);
+    if(Number.isInteger(row.base_cv_override)&&row.base_cv_override>=1&&row.base_cv_override<=4&&Number.isFinite(Date.parse(row.base_cv_override_at||row.updatedAt))){clean.base_cv_override=row.base_cv_override;clean.base_cv_override_at=row.base_cv_override_at||row.updatedAt;}
     const previous=out.rows[id];
     // Older clients omit new fields; an explicit empty string still clears a field.
     out.rows[id]=!previous||Date.parse(clean.updatedAt)>=Date.parse(previous.updatedAt)?{...previous,...clean}:{...clean,...previous};
+    if(previous?.base_cv_override_at&&(!clean.base_cv_override_at||Date.parse(previous.base_cv_override_at)>Date.parse(clean.base_cv_override_at))){out.rows[id].base_cv_override=previous.base_cv_override;out.rows[id].base_cv_override_at=previous.base_cv_override_at;}
   }
   return out;
 }
@@ -225,7 +229,35 @@ function renderParmaResearch(){
   icons();
 }
 let documentCache=null;
-function getDoc(row){const documents=model.data.documents;if(documentCache?.source!==documents)documentCache={source:documents,byId:new Map(documents.map(d=>[d.id,d]))};const selected=row.kind==='document'?row.cv_id:applicationState(row).matched_cv_id||row.cv_id;return documentCache.byId.get(selected);}
+function getDoc(row,delivery=false){const documents=model.data.documents;if(documentCache?.source!==documents)documentCache={source:documents,byId:new Map(documents.map(d=>[d.id,d]))};const selected=row.kind==='document'||delivery?row.cv_id:applicationState(row).matched_cv_id||row.cv_id;const doc=documentCache.byId.get(selected);return delivery&&row.kind==='job'&&doc?.base_id!==baseCVInfo(row).id?undefined:doc;}
+function baseCVInfo(row){
+  const state=applicationState(row),manual=state.base_cv_override,base=row.base_cv||{};
+  const override=Number.isInteger(manual)&&manual>=1&&manual<=4;
+  const id=override?manual:base.base_id;
+  return {id,override:override||base.override===true,label:id?`CV ${id} · ${override?baseCVLabels[id]:base.label_it||baseCVLabels[id]}`:'CV da scegliere'};
+}
+function baseCVChoice(parent,row){
+  if(row.kind!=='job')return;
+  const s=section(parent,'CV base'),info=baseCVInfo(row);
+  s.append(node('p',info.label+(info.override?' · Scelta manuale':'')));
+  if(!info.id&&row.base_cv?.suggested_base_id)s.append(node('p','Suggerito: CV '+row.base_cv.suggested_base_id+' · '+baseCVLabels[row.base_cv.suggested_base_id],'muted'));
+  const label=node('label','Scelta del CV base'),select=node('select');select.setAttribute('aria-label','Scelta del CV base');
+  const empty=node('option','Scegli un CV');empty.value='';select.append(empty);
+  for(const [id,text]of Object.entries(baseCVLabels)){const option=node('option',`CV ${id} · ${text}`);option.value=id;select.append(option);}
+  select.value=info.id?String(info.id):'';label.append(select);s.append(label);
+  const status=node('p');status.setAttribute('role','status');
+  const save=button('Salva scelta manuale','save',async()=>{
+    const base_id=Number(select.value);if(!Number.isInteger(base_id)||base_id<1||base_id>4){status.textContent='Scegli un CV da 1 a 4.';return;}
+    save.disabled=true;
+    try{
+      if(model.local)await localAPI('base-cv',{job_id:row.job_id,base_id});else await AgentSaved.queueBaseCV(row.job_id,base_id);
+      setApplicationRow(row,{base_cv_override:base_id,base_cv_override_at:new Date().toISOString()});
+      status.textContent=model.local?'Scelta salvata sul PC; verrà usata alla prossima consegna.':'Scelta accodata al PC; consegna in attesa del worker.';
+      render();
+    }catch(error){status.textContent=error.message;}finally{save.disabled=false;}
+  });
+  s.append(save,status);
+}
 function populateAreas(){const select=$('area'),current=select.value;select.replaceChildren(node('option','Tutte le aree'));select.firstChild.value='';for(const area of ['Parma','Reggio','Modena','Bologna','Milano','Piacenza','Monza','Remoto']){const o=node('option',area);o.value=area.toLowerCase();select.append(o);}select.value=current;}
 function renderMetrics(){
   const d=model.data,a=d.audit;
@@ -319,12 +351,13 @@ function render(){
       main.append(summary);if(state.matched_cv_id)main.append(node('div','CV associato: '+(getDoc(row)?.folder||'non disponibile'),'subline'));
     }
     if(row.kind==='job'){
+      const base=baseCVInfo(row);main.append(node('div',base.label+(base.override?' · Scelta manuale':''),'subline'));
       main.append(node('div',row.saved?'Salvato LinkedIn':'Ricerca archiviata','subline'));
       const observed=row.first_seen_at||row.captured_at;
       if(row.saved&&observed)main.append(node('div','Rilevato il '+new Date(observed).toLocaleDateString('it-IT'),'subline'));
     }
     const place=node('td',row.location||row.place||'—','location-cell');
-    const files=node('td'),actions=node('div',undefined,'file-actions'),doc=getDoc(row);
+    const files=node('td'),actions=node('div',undefined,'file-actions'),doc=getDoc(row,true);
     if(tracker){
       main.append(node('div',row.location||row.place||'Sede non registrata','subline'),node('div',row.sources.map(source=>({job:'Annuncio',company:'Azienda / recruiter',agent:'AI Job Agent',archived:'Non presente nel catalogo'}[source]||source)).join(' · '),'subline'));
       place.replaceChildren(stageSelect(row));
@@ -338,7 +371,7 @@ function render(){
     }
     if(row.kind==='agent'){for(const kind of ['cv','posting','company'])if(row.files[kind])actions.append(button(row.files[kind].label,'download',()=>downloadAgent(row,kind)));}
     else if(doc){if(doc.pending_revision)actions.append(node('span','Revisione da verificare','muted'));for(const fmt of ['pdf','docx'])if(doc.files[fmt])actions.append(button(fmt==='pdf'?'PDF':'Word',fmt==='pdf'?'file-text':'file-pen-line',()=>download(doc.files[fmt],doc.id,fmt),doc.ready?'ready':''));}
-    else actions.append(node('span',row.complete?'CV da preparare':'CV non disponibile','muted'));
+    else actions.append(node('span',row.kind==='job'?baseCVInfo(row).label:row.complete?'CV da preparare':'CV non disponibile','muted'));
     files.append(actions);const progress=node('td');
     if(row.kind==='job')progress.append(node('span',statuses[row.review_status]||row.review_status,'badge '+(row.review_status==='ready'?'ready':row.review?'review':!row.complete?'warn':'')));
     else progress.append(node('span',row.kind==='agent'?(row.status==='needs_visual_review'?'Verifica visiva':'Da verificare'):row.cv_ready?'CV pronto':'Da verificare','badge '+(row.cv_ready?'ready':'warn')));
@@ -543,13 +576,12 @@ function showDetail(row){
     $('detail').showModal();icons();return;
   }
   const url=row.link||row.url;if(url)actions.append(safeLink(url,row.kind==='job'?'Annuncio originale':'Sito / candidature'));
-  const doc=getDoc(row);if(doc){for(const fmt of ['pdf','docx'])if(doc.files[fmt])actions.append(button(fmt==='pdf'?'CV PDF':'CV Word','download',()=>download(doc.files[fmt],doc.id,fmt),'ready'));if(doc.drive_url)actions.append(safeLink(doc.drive_url,'Cartella Drive'));}
+  const doc=getDoc(row,true);if(doc){for(const fmt of ['pdf','docx'])if(doc.files[fmt])actions.append(button(fmt==='pdf'?'CV PDF':'CV Word','download',()=>download(doc.files[fmt],doc.id,fmt),'ready'));if(doc.drive_url)actions.append(safeLink(doc.drive_url,'Cartella Drive'));}
   if(row.posting)actions.append(button(row.posting.complete===false?'Annuncio PDF (parziale)':'Job posting PDF','file-text',()=>download(row.posting,row.job_id,'posting')));
   if(row.company_website)actions.append(safeLink(row.company_website,'Sito aziendale'));
   else if(row.kind==='job')actions.append(node('span','Sito aziendale da verificare','muted'));
-  if(row.kind==='job'&&row.complete&&model.local)actions.append(button('Revisiona CV','scan-text',()=>runReviews([row.job_id])));
-  if(row.kind==='job'&&row.complete&&!model.local)actions.append(button(row.cv_ready?'CV pronto':'Prepara CV','scan-text',async()=>{if(row.cv_ready)return;try{await AgentSaved.queueCV(row.job_id);toast('Richiesta inviata al worker del PC.');}catch(e){toast(e.message);}},row.cv_ready?'ready':''));
   root.append(actions);
+  baseCVChoice(root,row);
   if(model.view==='tracker'&&row.kind!=='document')applicationFields(root,row,doc);
   if(row.draft&&model.local){const s=section(root,'Bozza da verificare');s.append(button('Controlla le due pagine','eye',()=>showPreview(row,s)));}
   if(row.kind==='job'){renderJobSourceDetails(root,row);renderWorkbench(root,row);}
