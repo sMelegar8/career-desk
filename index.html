@@ -9,7 +9,7 @@
   <title>Career Desk</title>
   <link rel="icon" href="icon.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="style.css?v=99adca7add2754d3">
+  <link rel="stylesheet" href="style.css?v=8991c19b59b86f62">
   <script src="lucide.min.js?v=3411692820cb8d47" defer></script>
   <script src="agent_saved.js?v=af28be443c2c794f" defer></script>
   <script src="matching.js?v=06041d3de6fe5541" defer></script>
@@ -17,8 +17,9 @@
   <script src="cloud.js?v=69ea66868c4f58e5" defer></script>
   <script src="connections.js?v=6a99c0501e8b73ea" defer></script>
   <script src="application_mail.js?v=1b58c491e89df442" defer></script>
-  <script src="career_actions.js" defer></script>
-  <script src="app.js?v=8847894eda982d30" defer></script>
+  <script src="career_actions.js?v=01bd2d11d3d97326" defer></script>
+  <script src="application_sheet.js?v=b4c1bc53952b20e3" defer></script>
+  <script src="app.js?v=d2cba9e60b2bd835" defer></script>
 </head>
 <body>
   <section id="login" class="access">
@@ -48,6 +49,7 @@
         </section>
         <section class="nav-group" aria-label="Candidature e documenti"><h2>Candidature e documenti</h2>
         <button data-view="tracker"><i data-lucide="list-checks"></i> Tracker candidature <span id="count-tracker">0</span></button>
+        <button data-view="sheet"><i data-lucide="table"></i> Foglio candidature</button>
         <button data-view="notifications"><i data-lucide="bell"></i> Notifiche <span id="count-notifications">0</span></button>
         <button data-view="documents"><i data-lucide="files"></i> Libreria CV <span id="count-documents"></span></button>
         <button data-view="reviews"><i data-lucide="scan-text"></i> Revisioni ATS <span id="count-reviews"></span></button>
@@ -70,6 +72,7 @@
           <select id="sort-order" aria-label="Ordina annunci"><option value="score-desc">Allineamento: decrescente</option><option value="score-asc">Allineamento: crescente</option><option value="date-desc">Data: più recenti</option><option value="distance-asc">Distanza: più vicini</option><option value="company">Azienda: A-Z</option><option value="role">Ruolo: A-Z</option></select>
         </div></details>
         <div id="agent-panel" class="notice" hidden><p>Documenti nel repository privato. Il CV resta una bozza tailored da verificare prima dell'invio. Dal PC viene usato l'accesso GitHub locale; dal telefono serve un token limitato ad Auto-LinkdIn-v2.0 con permesso Contents: read e, per accodare CV, Actions: write, conservato solo in memoria fino al blocco o alla chiusura.</p><label for="agent-token">Accesso alla raccolta privata</label><input type="password" id="agent-token" autocomplete="off"><button id="agent-connect" class="primary">Collega / aggiorna raccolta</button><p id="agent-message" role="status"></p></div>
+        <section id="sheet-panel" class="sheet-panel" hidden aria-label="Foglio candidature"></section>
         <section id="parma-research-panel" hidden aria-label="Opportunità Parma ottobre 2026"></section>
         <section id="connections-panel" hidden aria-label="Connessioni e configurazione"></section>
         <section id="notifications-panel" hidden aria-label="Notifiche candidature"></section>

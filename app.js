@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const enc = new TextEncoder(), dec = new TextDecoder();
 const AAD = enc.encode('career-desk-v1');
 const model = {data:null,key:null,config:null,checks:{version:2,rows:{}},view:'saved',page:0,local:false,csrf:'',token:'',save:Promise.resolve(),agentRows:[],session:0,newsletter:{draft:null,revision:'',loaded:false,dirty:false}};
-const labels = {notifications:'Notifiche candidature',connections:'Connessioni e configurazione',integrations:'Integrazioni',intelligence:'Job Intelligence','parma-research':'Parma · opportunità ottobre 2026',saved:'Salvati LinkedIn',agent:'Salvati da AI Job Agent',tracker:'Tracker candidature',newsletter:'Newsletter / Brief',jobs:'Tutti gli annunci',companies:'Aziende e recruiter',documents:'Libreria CV',reviews:'Revisioni ATS','linkedin-profile':'Profilo LinkedIn','portfolio-review':'Revisione portfolio',impact:'Impatto CV'};
+const labels = {notifications:'Notifiche candidature',connections:'Connessioni e configurazione',integrations:'Integrazioni',intelligence:'Job Intelligence','parma-research':'Parma · opportunità ottobre 2026',saved:'Salvati LinkedIn',agent:'Salvati da AI Job Agent',tracker:'Tracker candidature',sheet:'Foglio candidature',newsletter:'Newsletter / Brief',jobs:'Tutti gli annunci',companies:'Aziende e recruiter',documents:'Libreria CV',reviews:'Revisioni ATS','linkedin-profile':'Profilo LinkedIn','portfolio-review':'Revisione portfolio',impact:'Impatto CV'};
 const stages = {planned:'Da valutare',interested:'Mi interessa',drafted:'Bozza non inviata',applied:'Inviata',interview:'Colloquio',offer:'Offerta',hired:'Assunto',rejected:'Esito negativo',withdrawn:'Ritirata',no_response:'Chiusa: nessuna risposta',offer_declined:'Offerta rifiutata'};
 const applicationStages = ['applied','interview','offer','hired','rejected','withdrawn','no_response','offer_declined'];
 const newsletterAreas = ['R&D','Project Management','Software Development','Chimica e laboratorio','Data Analysis e Data Engineering','AI e LLM','Qualita e Compliance','Altre opportunita'];
@@ -109,7 +109,7 @@ async function unlock(password){
   $('agent-count').textContent=model.local?'Stato in aggiornamento':'Consultazione da web';
   populateAreas();render();await persist(false);
   document.dispatchEvent(new Event('career-ready'));
-  if(['agent','tracker'].includes(model.view)&&AgentSaved.available())await loadAgentCollection();
+  if(['agent','tracker','sheet'].includes(model.view)&&AgentSaved.available())await loadAgentCollection();
   if(model.view==='newsletter'&&canConfigure())await loadNewsletterConfig();
   if(model.local)refreshWorker();
 }
@@ -266,7 +266,7 @@ function baseCVChoice(parent,row){
 function populateAreas(){const select=$('area'),current=select.value;select.replaceChildren(node('option','Tutte le aree'));select.firstChild.value='';for(const area of ['Parma','Reggio','Modena','Bologna','Milano','Piacenza','Monza','Remoto']){const o=node('option',area);o.value=area.toLowerCase();select.append(o);}select.value=current;}
 function renderMetrics(){
   const d=model.data,a=d.audit;
-  $('count-saved').textContent=a.saved_jobs;$('count-jobs').textContent=a.all_jobs;$('count-companies').textContent=a.companies;$('count-documents').textContent=a.cvs;
+  $('count-saved').textContent=a.saved_jobs;$('count-jobs').textContent=a.all_jobs;$('count-companies').textContent=a.companies;$('count-documents').textContent=(model.data.base_cvs||[]).length;
   $('count-agent').textContent=model.agentRows.length;
   const applications=applicationRows();$('count-tracker').textContent=applications.filter(r=>tracked(r)).length;
   const reviewed=[...d.jobs,...d.companies].filter(j=>j.review).length;$('count-reviews').textContent=reviewed;
@@ -286,7 +286,7 @@ function renderMetrics(){
   renderSystem(d.system);
   $('budget-info').title='Claude Code sul PC con il token dell’abbonamento; chiavi API escluse';
 }
-function allRows(){const d=model.data;switch(model.view){case'tracker':return applicationRows().filter(r=>tracked(r));case'agent':return model.agentRows;case'saved':return d.jobs.filter(j=>j.saved);case'companies':return d.companies;case'documents':return d.documents.map(doc=>({id:'cv:'+doc.id,cv_id:doc.id,name:doc.folder,role:doc.group,kind:'document',cv_ready:doc.ready}));case'reviews':return [...d.companies.filter(c=>c.review),...d.jobs.filter(j=>j.complete)];default:return d.jobs;}}
+function allRows(){const d=model.data;switch(model.view){case'tracker':return applicationRows().filter(r=>tracked(r));case'agent':return model.agentRows;case'saved':return d.jobs.filter(j=>j.saved);case'companies':return d.companies;case'documents':return (d.base_cvs||[]).map(base=>({...base,id:'base:'+base.id,base_id:base.id,name:`CV ${base.id} · ${base.label_it}`,role:(base.target_role_families||[]).join(' · '),kind:'base'}));case'reviews':return [...d.companies.filter(c=>c.review),...d.jobs.filter(j=>j.complete)];default:return d.jobs;}}
 const fitLabels={apply_now:'Candidatura diretta',bridge:'Ruolo affine con gap',insufficient_information:'Da verificare',not_aligned:'Non allineato',gate_failed:'Requisito linguistico o professionale non soddisfatto'};
 function alignmentScore(row){const selected=applicationState(row).matched_cv_id;if(selected&&typeof CareerMatching!=='undefined'&&model.data?.documents){const doc=getDoc(row);if(doc)return CareerMatching.evaluate(row,doc).score;}const score=row.fit?.score;return typeof score==='number'&&Number.isFinite(score)&&score>=0&&score<=100?score:null;}
 function compareRows(a,b,order){
@@ -320,13 +320,14 @@ function render(){
   renderMetrics();$('view-title').textContent=labels[model.view];
   $('agent-panel').hidden=model.view!=='agent';
   const extra=['connections','integrations','intelligence','notifications'].includes(model.view);$('notifications-panel').hidden=model.view!=='notifications';$('connections-panel').hidden=model.view!=='connections';$('integrations-panel').hidden=model.view!=='integrations';$('intelligence-panel').hidden=model.view!=='intelligence';
-  const parma=model.view==='parma-research',impact=model.view==='impact',newsletter=model.view==='newsletter',tracker=model.view==='tracker',linkedin=model.view==='linkedin-profile',portfolioReview=model.view==='portfolio-review';$('parma-research-panel').hidden=!parma;$('impact-panel').hidden=!impact;$('newsletter-panel').hidden=!newsletter;$('linkedin-profile-panel').hidden=!linkedin;$('portfolio-review-panel').hidden=!portfolioReview;
+  const sheet=model.view==='sheet';$('sheet-panel').hidden=!sheet;
+  const parma=model.view==='parma-research'||sheet,impact=model.view==='impact',newsletter=model.view==='newsletter',tracker=model.view==='tracker',linkedin=model.view==='linkedin-profile',portfolioReview=model.view==='portfolio-review';$('parma-research-panel').hidden=!parma||sheet;$('impact-panel').hidden=!impact;$('newsletter-panel').hidden=!newsletter;$('linkedin-profile-panel').hidden=!linkedin;$('portfolio-review-panel').hidden=!portfolioReview;
   for(const selector of ['.metrics','.toolbar','.search','.filter-drawer','.table-wrap','.pagination','#results-status','#empty'])document.querySelector(selector).hidden=parma||impact||newsletter||linkedin||portfolioReview||extra;
   document.querySelector('.metrics').hidden=parma||impact||newsletter||linkedin||portfolioReview||extra||tracker;
   $('status').hidden=tracker;$('tracker-stage').hidden=!tracker;
   document.querySelector('table').classList.toggle('tracker-table',tracker);
   const headings=document.querySelectorAll('thead th');headings[2].textContent=tracker?'Stato': 'Sede';headings[3].textContent=tracker?'Invio / Follow-up':'Documenti';headings[4].textContent=tracker?'Canale / CV / Esito':'Revisione';
-  $('view-subtitle').textContent=model.view==='companies'?'Target e candidature spontanee, non vacancy confermate':model.view==='documents'?'CV disponibili e revisioni in corso':'Annunci archiviati: verifica l’apertura prima della candidatura';
+  $('view-subtitle').textContent=model.view==='companies'?'Target e candidature spontanee, non vacancy confermate':model.view==='documents'?'I quattro CV base approvati: stesso file per tutti gli annunci della famiglia.':'Annunci archiviati: verifica l’apertura prima della candidatura';
   if(model.view==='agent')$('view-subtitle').textContent='Pacchetti conservati tramite Mi interessa: accesso privato e verifica prima dell\'invio';
   if(impact)$('view-subtitle').textContent='Dati verificabili per riscrivere i CV con risultati concreti';
   if(tracker)$('view-subtitle').textContent='Candidature aggiornate dalle email selezionate e dalle tue modifiche. Nessun invio dalla dashboard.';
@@ -337,14 +338,16 @@ function render(){
   document.querySelectorAll('[data-view]').forEach(b=>{b.classList.toggle('active',b.dataset.view===model.view);b.setAttribute('aria-current',b.dataset.view===model.view?'page':'false');});
   renderTrackerSummary(tracker);
   if(extra){$('view-subtitle').textContent='';if(model.view==='notifications')CareerApplicationMail.render();else if(model.view==='connections')renderConnections();else if(model.view==='integrations')renderIntegrations();else renderJobIntelligence();return;}
+  if(sheet){$('view-subtitle').textContent='Tutte le candidature in un foglio: ordina, filtra, modifica ed esporta in Excel.';CareerSheet.render($('sheet-panel'));return;}
   if(parma){renderParmaResearch();return;}
   if(impact){renderImpact();return;}
   if(newsletter){renderNewsletter();return;}
   if(linkedin){renderLinkedInProfile();return;}
   if(portfolioReview){renderLinkedInProfile('portfolio');return;}
   const rows=visibleRows(),pages=Math.max(1,Math.ceil(rows.length/30));model.page=Math.min(model.page,pages-1);
-  const fragment=document.createDocumentFragment();$('rows').replaceChildren();$('empty').hidden=rows.length!==0;$('results-status').textContent=rows.length+' risultati';
+  const fragment=document.createDocumentFragment();$('rows').replaceChildren();$('empty').hidden=rows.length!==0;$('results-status').textContent=rows.length+' risultati';const driveRoot=model.view==='documents'&&model.data.base_cvs?.[0]?.drive_root_url;if(driveRoot)$('results-status').append(' · ',safeLink(driveRoot,'Cartella Drive dei CV base'));
   for(const row of rows.slice(model.page*30,(model.page+1)*30)){
+    if(row.kind==='base'){fragment.append(baseCVRow(row));continue;}
     const state=applicationState(row),tr=node('tr');tr.dataset.id=row.id;tr.classList.toggle('sent',!!state.checked);
     const check=node('td',undefined,'check-cell');if(row.kind!=='document'){const input=node('input');input.type='checkbox';input.checked=!!state.checked;input.setAttribute('aria-label','Candidatura già inviata a '+(row.company||row.name));input.addEventListener('change',()=>{setApplicationRow(row,{checked:input.checked});if(!tracker)render();});check.append(input);}
     const main=node('td');main.append(node('div',row.company||row.name,'company'),node('div',row.title||row.role,'role'));
@@ -387,6 +390,15 @@ function render(){
   }
   $('rows').append(fragment);
   $('previous').disabled=model.page===0;$('next').disabled=model.page>=pages-1;$('page-count').textContent=`${model.page+1} / ${pages}`;icons();
+}
+// Library row for one of the four approved base CVs: files live in its Drive folder.
+function baseCVRow(row){
+  const tr=node('tr'),main=node('td');tr.dataset.id=row.id;main.append(node('div',row.name,'company'),node('div',row.label_en,'role'),node('div',row.role,'subline'));
+  const files=node('td'),actions=node('div',undefined,'file-actions');
+  if(row.drive_folder_url)actions.append(safeLink(row.drive_folder_url,'Apri su Drive'));else actions.append(node('span','Link Drive mancante','muted'));
+  files.append(actions,node('div',Object.values(row.files||{}).map(f=>f.name).join(' · '),'subline'));
+  const status=node('td');status.append(node('span','Approvato '+new Date(row.approved_at+'T00:00:00').toLocaleDateString('it-IT'),'badge ready'));
+  tr.append(node('td',undefined,'check-cell'),main,node('td','Drive','location-cell'),files,status,node('td',undefined,'open-cell'));return tr;
 }
 function section(parent,title){const s=node('section',undefined,'detail-section');s.append(node('h3',title));parent.append(s);return s;}
 function renderSystem(system){
@@ -664,7 +676,7 @@ $('unlock-form').addEventListener('submit',async e=>{e.preventDefault();const b=
 function viewFromHash(){const view=location.hash.slice(1);return view==='agent-saved'?'agent':Object.hasOwn(labels,view)?view:null;}
 function closeNavigation(){if(window.matchMedia('(max-width:760px)').matches){$('career-navigation').classList.remove('nav-open');$('navigation-toggle').setAttribute('aria-expanded','false');$('navigation-toggle').setAttribute('aria-label','Apri menu');}}
 $('navigation-toggle').onclick=()=>{const open=$('career-navigation').classList.toggle('nav-open');$('navigation-toggle').setAttribute('aria-expanded',String(open));$('navigation-toggle').setAttribute('aria-label',open?'Chiudi menu':'Apri menu');};
-function selectView(view){if(!Object.hasOwn(labels,view))return;closeNavigation();model.view=view;model.page=0;if(!model.data)return;render();if(['agent','tracker'].includes(model.view)&&AgentSaved.available())loadAgentCollection();if(model.view==='newsletter'&&canConfigure()&&!model.newsletter.loaded)loadNewsletterConfig();}
+function selectView(view){if(!Object.hasOwn(labels,view))return;closeNavigation();model.view=view;model.page=0;if(!model.data)return;render();if(['agent','tracker','sheet'].includes(model.view)&&AgentSaved.available())loadAgentCollection();if(model.view==='newsletter'&&canConfigure()&&!model.newsletter.loaded)loadNewsletterConfig();}
 document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{history.replaceState(null,'',location.pathname+location.search+'#'+b.dataset.view);selectView(b.dataset.view);}));
 window.addEventListener('hashchange',()=>selectView(viewFromHash()));
 $('agent-connect').onclick=()=>{const value=$('agent-token').value.trim();$('agent-token').value='';loadAgentCollection(value||undefined);};
