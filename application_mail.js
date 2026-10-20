@@ -61,5 +61,7 @@ const CareerApplicationMail=(()=>{
   }
   function lock(){snapshot=null;aliases.clear();updateCount();$('notifications-panel').replaceChildren();}
   document.addEventListener('career-ready',()=>{refresh();});setInterval(refresh,60000);
-  return {apply,render:renderNotifications,refresh,lock};
+  // Mail-only ids that point to a known posting resolve to that posting's row.
+  function alias(id){const target=aliases.get(id);return target&&target!==id?target:null;}
+  return {apply,alias,render:renderNotifications,refresh,lock};
 })();

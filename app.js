@@ -61,6 +61,8 @@ function applicationRows(){
     else grouped.set(identity,{...row,state_ids:[row.id],sources:[row.kind]});
   }
   const known=new Set([...grouped.values()].flatMap(r=>r.state_ids));
+  const byState=new Map([...grouped.values()].flatMap(r=>r.state_ids.map(id=>[id,r])));
+  for(const id of Object.keys(model.checks.rows)){if(known.has(id))continue;const target=byState.get(CareerApplicationMail.alias(id));if(target){target.state_ids.push(id);known.add(id);}}
   for(const [id,state]of Object.entries(model.checks.rows))if(!known.has(id)&&!id.startsWith('impact:')&&!id.startsWith('cv:')&&(state.checked||applicationStages.includes(state.stage)||['interested','drafted'].includes(state.stage)||state.matched_cv_id))grouped.set('archived:'+id,{id,kind:'archived',name:'Record archiviato',role:id,state_ids:[id],sources:['archived']});
   const rows=[...grouped.values()],byId=new Map();
   for(const row of rows)for(const id of row.state_ids)byId.set(id,row);
