@@ -399,8 +399,24 @@ function baseCVRow(row){
   const files=node('td'),actions=node('div',undefined,'file-actions');
   if(row.drive_folder_url)actions.append(safeLink(row.drive_folder_url,'Apri su Drive'));else actions.append(node('span','Link Drive mancante','muted'));
   files.append(actions,node('div',Object.values(row.files||{}).map(f=>f.name).join(' · '),'subline'));
-  const status=node('td');status.append(node('span','Approvato '+new Date(row.approved_at+'T00:00:00').toLocaleDateString('it-IT'),'badge ready'));
-  tr.append(node('td',undefined,'check-cell'),main,node('td','Drive','location-cell'),files,status,node('td',undefined,'open-cell'));return tr;
+  const status=node('td');status.append(node('span','Approvato '+new Date(row.approved_at+'T00:00:00').toLocaleDateString('it-IT')+(row.version_label?' · '+row.version_label:''),'badge ready'));
+  const open=node('td',undefined,'open-cell');const b=button('','chevron-right',()=>showBaseDetail(row),'icon');b.title='Keyword del CV';b.setAttribute('aria-label','Keyword di '+row.name);open.append(b);
+  tr.append(node('td',undefined,'check-cell'),main,node('td','Drive','location-cell'),files,status,open);return tr;
+}
+// Keywords from the archived-postings pool that the base CV contains, with where they appear, and frequent gaps.
+function showBaseDetail(row){
+  $('detail-company').textContent=row.name;$('detail-title').textContent=row.label_en;$('detail-location').textContent=row.role||'';
+  const root=$('detail-content');root.replaceChildren();const actions=node('div',undefined,'actions');
+  if(row.drive_folder_url)actions.append(safeLink(row.drive_folder_url,'Apri su Drive'));root.append(actions);
+  const k=row.keywords;
+  if(!k){root.append(node('p','Analisi delle keyword non disponibile per questa versione.','notice'));$('detail').showModal();icons();return;}
+  const date=k.pool_generated_at?new Date(k.pool_generated_at).toLocaleDateString('it-IT'):'data non disponibile';
+  root.append(node('p',`Pool: ${k.area_postings} annunci archiviati di ${k.area_companies} aziende nell'area ${k.area}, conteggio deterministico del ${date}. Percentuale = annunci che citano la keyword; non è una statistica di mercato.`,'notice'));
+  const present=section(root,`Keyword inserite nel CV (${k.in_cv.length})`);
+  for(const item of k.in_cv){present.append(node('h4',`${item.keyword} · ${item.postings}/${k.area_postings} annunci (${item.share_pct}%)`),node('p','Dove: '+item.sections.map(s=>s.charAt(0)+s.slice(1).toLowerCase()).join(', '),'muted'));if(item.excerpt)present.append(node('blockquote',item.excerpt));}
+  const gaps=section(root,'Keyword frequenti non presenti');gaps.append(node('p','Non inserite perché non documentate: restano lacune da valutare per ogni annuncio.','muted'));
+  gaps.append(node('p',k.gaps.map(g=>`${g.keyword} ${g.share_pct}%`).join(' · ')||'Nessuna'));
+  $('detail').showModal();icons();
 }
 function section(parent,title){const s=node('section',undefined,'detail-section');s.append(node('h3',title));parent.append(s);return s;}
 function renderSystem(system){
