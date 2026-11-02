@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const enc = new TextEncoder(), dec = new TextDecoder();
 const AAD = enc.encode('career-desk-v1');
 const model = {data:null,key:null,config:null,checks:{version:2,rows:{}},view:'saved',page:0,local:false,csrf:'',token:'',save:Promise.resolve(),agentRows:[],session:0,newsletter:{draft:null,revision:'',loaded:false,dirty:false}};
-const labels = {notifications:'Notifiche candidature',connections:'Connessioni e configurazione',integrations:'Integrazioni',intelligence:'Job Intelligence','parma-research':'Parma · opportunità ottobre 2026',saved:'Salvati LinkedIn',agent:'Salvati da AI Job Agent',tracker:'Tracker candidature',sheet:'Foglio candidature',newsletter:'Newsletter / Brief',jobs:'Tutti gli annunci',companies:'Aziende e recruiter',documents:'Libreria CV',reviews:'Revisioni ATS','linkedin-profile':'Profilo LinkedIn','portfolio-review':'Revisione portfolio',impact:'Impatto CV'};
+const labels = {notifications:'Notifiche candidature',connections:'Connessioni e configurazione',integrations:'Integrazioni',intelligence:'Job Intelligence','parma-research':'Parma · opportunità ottobre 2026',saved:'Salvati LinkedIn',agent:'Salvati da AI Job Agent',tracker:'Tracker candidature',sheet:'Foglio candidature',newsletter:'Newsletter / Brief',jobs:'Tutti gli annunci',companies:'Aziende e recruiter',documents:'Libreria CV',reviews:'Revisioni ATS','linkedin-profile':'Profilo LinkedIn','linkedin-cv':'LinkedIn: da integrare o correggere','portfolio-review':'Revisione portfolio',impact:'Impatto CV'};
 const stages = {planned:'Da valutare',interested:'Mi interessa',drafted:'Bozza non inviata',applied:'Inviata',interview:'Colloquio',offer:'Offerta',hired:'Assunto',rejected:'Esito negativo',withdrawn:'Ritirata',no_response:'Chiusa: nessuna risposta',offer_declined:'Offerta rifiutata'};
 const applicationStages = ['applied','interview','offer','hired','rejected','withdrawn','no_response','offer_declined'];
 const newsletterAreas = ['R&D','Project Management','Software Development','Chimica e laboratorio','Data Analysis e Data Engineering','AI e LLM','Qualita e Compliance','Altre opportunita'];
@@ -211,6 +211,58 @@ function renderLinkedInProfile(kind='linkedin'){
   }
   sources.append(sourceList);icons();
 }
+function linkedinCvKey(item){return 'impact:linkedin-cv:'+item.id;}
+function linkedinCvOpen(){const items=model.data?.linkedin_cv_alignment?.items||[];return items.filter(item=>!model.checks.rows[linkedinCvKey(item)]?.checked).length;}
+function renderLinkedInCv(){
+  const root=$('linkedin-cv-panel'),data=model.data.linkedin_cv_alignment;root.replaceChildren();
+  if(!data){root.append(node('p','Nessun confronto tra CV base e LinkedIn disponibile.','linkedin-empty'));return;}
+  const date=value=>{const d=new Date(value);return value&&!isNaN(d)?d.toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'}):'';};
+  const addSection=title=>{const s=node('section',undefined,'linkedin-section');s.append(node('h2',title));root.append(s);return s;};
+  const fields=(parent,values)=>{const dl=node('dl',undefined,'linkedin-fields');for(const [label,text]of values)if(text)dl.append(node('dt',label),node('dd',text));parent.append(dl);};
+  const head=addSection(data.title||'LinkedIn: da integrare o correggere'),cvSet=data.cv_set||{},baseline=data.linkedin_baseline||{};
+  if(data.summary)head.append(node('p',data.summary));
+  const basis=[cvSet.label,baseline.read_at?'profilo letto il '+date(baseline.read_at):'',data.generated_at?'aggiornata il '+date(data.generated_at):''].filter(Boolean).join(' · ');
+  head.append(node('p',basis,'muted'));
+  if(cvSet.cvs?.length)head.append(node('p','CV considerati: '+cvSet.cvs.map(cv=>cv.key+' '+cv.label).join(' · '),'muted'));
+  if(data.pending){
+    const cv=folder=>'CV '+folder.replace(/_/g,' ');const what=[...(data.pending.changed||[]).map(f=>cv(f)+' modificato'),...(data.pending.added||[]).map(f=>cv(f)+' nuovo'),...(data.pending.removed||[]).map(f=>cv(f)+' tolto')];
+    if(data.pending.review_changed)what.push('revisione LinkedIn aggiornata');
+    head.append(node('p',`CV cambiati dal ${date(data.pending.detected_at)}${what.length?' ('+what.join(', ')+')':''}: le voci qui sotto sono ancora quelle precedenti. Il PC riprova al prossimo giro.`,'notice linkedin-cv-pending'));
+  }
+  head.append(node('p','Si aggiorna da sola quando un CV base viene modificato, approvato di nuovo o aggiunto, e quando la revisione del profilo LinkedIn cambia.','muted'));
+  if(baseline.note)head.append(node('p',baseline.note,'linkedin-note'));
+  const progress=node('p',undefined,'linkedin-cv-progress');progress.setAttribute('aria-live','polite');head.append(progress);
+  const items=data.items||[];
+  const update=()=>{const done=items.filter(item=>model.checks.rows[linkedinCvKey(item)]?.checked).length;progress.textContent=`${done} di ${items.length} voci fatte`;$('count-linkedin-cv').textContent=items.length-done||'';};
+  const groups=[['correggere','Da correggere','LinkedIn dice qualcosa che i CV non sostengono.'],['integrare','Da integrare','Nei CV c\'è, su LinkedIn manca.']];
+  for(const [kind,title,hint] of groups){
+    const rows=items.filter(item=>item.kind===kind);if(!rows.length)continue;
+    const section=addSection(`${title} (${rows.length})`);section.append(node('p',hint,'muted'));
+    for(const item of rows){
+      const article=node('article',undefined,'linkedin-item linkedin-cv-item'),heading=node('div',undefined,'linkedin-item-heading'),label=node('label',undefined,'check-label'),check=node('input'),body=node('div',undefined,'linkedin-cv-body');
+      check.type='checkbox';check.checked=!!model.checks.rows[linkedinCvKey(item)]?.checked;
+      const refresh=()=>{article.classList.toggle('done',check.checked);body.hidden=check.checked;};
+      check.onchange=()=>{setRow(linkedinCvKey(item),{checked:check.checked});refresh();update();};
+      label.append(check,node('h3',item.section));
+      const badges=node('div',undefined,'linkedin-cv-badges');
+      badges.append(node('span','Priorità '+item.priority,'badge '+(item.priority==='Alta'?'linkedin-high':'linkedin-medium')));
+      if(item.cv_refs?.length)badges.append(node('span','CV '+item.cv_refs.join(' · '),'badge'));
+      heading.append(label,badges);article.append(heading);
+      fields(body,[['Su LinkedIn',item.linkedin],['Nei CV',item.cv],['Cosa fare',item.action],['Dove',item.path]]);
+      for(const entry of item.texts||[]){
+        const box=node('div',undefined,'linkedin-cv-text'),top=node('div',undefined,'linkedin-item-heading');
+        const copy=button('','copy',async()=>{copy.disabled=true;try{await navigator.clipboard.writeText(entry.text);toast('Testo copiato');}catch{toast('Copia non riuscita. Seleziona il testo e copialo manualmente.');}finally{copy.disabled=false;}},'icon');
+        copy.title='Copia '+entry.label;copy.setAttribute('aria-label',copy.title);
+        top.append(node('h4',`${entry.label} · ${entry.text.length} caratteri`),copy);
+        const text=node('p',entry.text,'linkedin-rewrite');text.lang='en';box.append(top,text);body.append(box);
+      }
+      article.append(body);refresh();section.append(article);
+    }
+  }
+  const list=(title,values)=>{if(!values?.length)return;const s=addSection(title),ul=node('ul',undefined,'linkedin-list');for(const text of values)ul.append(node('li',text));s.append(ul);};
+  list('Da non mettere su LinkedIn',data.do_not_add);list('Domande aperte',data.questions);
+  update();icons();
+}
 function renderParmaResearch(){
   const root=$('parma-research-panel'),research=model.data.parma_research;root.replaceChildren();
   if(!research){root.append(node('p','Ricerca Parma non disponibile in questo snapshot.'));return;}
@@ -271,7 +323,7 @@ function renderMetrics(){
   $('count-saved').textContent=a.saved_jobs;$('count-jobs').textContent=a.all_jobs;$('count-companies').textContent=a.companies;$('count-documents').textContent=(model.data.base_cvs||[]).length;
   $('count-agent').textContent=model.agentRows.length;
   const applications=applicationRows();$('count-tracker').textContent=applications.filter(r=>tracked(r)).length;
-  const reviewed=[...d.jobs,...d.companies].filter(j=>j.review).length;$('count-reviews').textContent=reviewed;
+  const reviewed=[...d.jobs,...d.companies].filter(j=>j.review).length;$('count-reviews').textContent=reviewed;$('count-linkedin-cv').textContent=linkedinCvOpen()||'';
   $('metric-total').textContent=a.complete_jobs;$('metric-cvs').textContent=d.documents.filter(x=>x.ready).length;
   $('metric-sent').textContent=applications.filter(r=>applicationState(r).checked).length;$('metric-review').textContent=reviewed;
   const questions=d.impact_questions||[];$('count-impact').textContent=`${questions.filter(q=>(model.checks.rows[impactId(q)]?.note||'').trim()).length}/${questions.length}`;
@@ -323,7 +375,7 @@ function render(){
   $('agent-panel').hidden=model.view!=='agent';
   const extra=['connections','integrations','intelligence','notifications'].includes(model.view);$('notifications-panel').hidden=model.view!=='notifications';$('connections-panel').hidden=model.view!=='connections';$('integrations-panel').hidden=model.view!=='integrations';$('intelligence-panel').hidden=model.view!=='intelligence';
   const sheet=model.view==='sheet';$('sheet-panel').hidden=!sheet;
-  const parma=model.view==='parma-research'||sheet,impact=model.view==='impact',newsletter=model.view==='newsletter',tracker=model.view==='tracker',linkedin=model.view==='linkedin-profile',portfolioReview=model.view==='portfolio-review';$('parma-research-panel').hidden=!parma||sheet;$('impact-panel').hidden=!impact;$('newsletter-panel').hidden=!newsletter;$('linkedin-profile-panel').hidden=!linkedin;$('portfolio-review-panel').hidden=!portfolioReview;
+  const parma=model.view==='parma-research'||sheet,impact=model.view==='impact',newsletter=model.view==='newsletter',tracker=model.view==='tracker',linkedin=model.view==='linkedin-profile'||model.view==='linkedin-cv',linkedinCv=model.view==='linkedin-cv',portfolioReview=model.view==='portfolio-review';$('parma-research-panel').hidden=!parma||sheet;$('impact-panel').hidden=!impact;$('newsletter-panel').hidden=!newsletter;$('linkedin-profile-panel').hidden=!linkedin||linkedinCv;$('linkedin-cv-panel').hidden=!linkedinCv;$('portfolio-review-panel').hidden=!portfolioReview;
   for(const selector of ['.metrics','.toolbar','.search','.filter-drawer','.table-wrap','.pagination','#results-status','#empty'])document.querySelector(selector).hidden=parma||impact||newsletter||linkedin||portfolioReview||extra;
   document.querySelector('.metrics').hidden=parma||impact||newsletter||linkedin||portfolioReview||extra||tracker;
   $('status').hidden=tracker;$('tracker-stage').hidden=!tracker;
@@ -344,6 +396,7 @@ function render(){
   if(parma){renderParmaResearch();return;}
   if(impact){renderImpact();return;}
   if(newsletter){renderNewsletter();return;}
+  if(linkedinCv){renderLinkedInCv();return;}
   if(linkedin){renderLinkedInProfile();return;}
   if(portfolioReview){renderLinkedInProfile('portfolio');return;}
   const rows=visibleRows(),pages=Math.max(1,Math.ceil(rows.length/30));model.page=Math.min(model.page,pages-1);
@@ -714,7 +767,7 @@ $('settings').onclick=()=>{$('sync-dialog').showModal();};
 $('sync-now').onclick=async()=>{model.token=$('github-token').value.trim();$('github-token').value='';try{await githubSync();$('sync-message').textContent='Candidature, CV associati e lettere sincronizzati.';}catch(e){$('sync-message').textContent=e.message;}};
 $('export-state').onclick=async()=>saveBlob(JSON.stringify(await encrypt(model.checks)),'Career_Desk_Candidature.enc','application/json');
 $('import-state').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;const incoming=JSON.parse(dec.decode(await decrypt(JSON.parse(await file.text()))));model.checks=merge(model.checks,incoming);await persist();render();toast('Spunte importate');}catch{toast('File non valido o cifrato con un’altra password');}e.target.value='';};
-$('lock').onclick=async()=>{CareerApplicationMail.lock();CareerCloud.lock();for(const input of document.querySelectorAll('#connections-panel input'))input.value='';$('connections-panel').replaceChildren();clearTimeout(saveTimer);await persist(false);await model.save;applicationCache=null;documentCache=null;model.session++;AgentSaved.lock();model.agentRows=[];$('agent-token').value='';$('agent-message').textContent='';$('count-agent').textContent='0';model.data=null;model.key=null;model.token='';model.checks={version:2,rows:{}};model.newsletter={draft:null,revision:'',loaded:false,dirty:false};$('newsletter-form').reset();$('newsletter-sections').replaceChildren();$('newsletter-preview-frame').removeAttribute('srcdoc');$('newsletter-preview-frame').hidden=true;$('workspace').hidden=true;$('rows').replaceChildren();$('detail-content').replaceChildren();$('linkedin-profile-panel').replaceChildren();$('parma-research-panel').replaceChildren();$('integrations-panel').replaceChildren();$('intelligence-panel').replaceChildren();$('connections-panel').replaceChildren();connectionsData=null;connectionsDirty=false;document.querySelectorAll('dialog').forEach(d=>d.close());$('login').hidden=false;};
+$('lock').onclick=async()=>{CareerApplicationMail.lock();CareerCloud.lock();for(const input of document.querySelectorAll('#connections-panel input'))input.value='';$('connections-panel').replaceChildren();clearTimeout(saveTimer);await persist(false);await model.save;applicationCache=null;documentCache=null;model.session++;AgentSaved.lock();model.agentRows=[];$('agent-token').value='';$('agent-message').textContent='';$('count-agent').textContent='0';model.data=null;model.key=null;model.token='';model.checks={version:2,rows:{}};model.newsletter={draft:null,revision:'',loaded:false,dirty:false};$('newsletter-form').reset();$('newsletter-sections').replaceChildren();$('newsletter-preview-frame').removeAttribute('srcdoc');$('newsletter-preview-frame').hidden=true;$('workspace').hidden=true;$('rows').replaceChildren();$('detail-content').replaceChildren();$('linkedin-profile-panel').replaceChildren();$('linkedin-cv-panel').replaceChildren();$('parma-research-panel').replaceChildren();$('integrations-panel').replaceChildren();$('intelligence-panel').replaceChildren();$('connections-panel').replaceChildren();connectionsData=null;connectionsDirty=false;document.querySelectorAll('dialog').forEach(d=>d.close());$('login').hidden=false;};
 $('refresh').onclick=async()=>{if(model.view==='notifications'&&canConfigure()){await CareerApplicationMail.refresh();return;}if(model.view==='connections'&&canConfigure()){await loadConnections(true);return;}if(model.view==='integrations'&&!model.local&&CareerCloud.connected){try{await refreshIntegrationData();toast('Configurazione aggiornata');}catch(e){toast(e.message);}return;}if(model.view==='newsletter'&&canConfigure()){await loadNewsletterConfig();return;}if(model.view==='agent'){await loadAgentCollection();return;}try{if(model.local){model.data=await readCatalog();model.checks=merge(model.data.state,model.checks);}else{model.config=await fetchJSON('config.json');model.data=await readCatalog();const shared=JSON.parse(dec.decode(await decrypt(await fetchJSON('state.enc'))));model.checks=merge(model.data.state,shared,model.checks);model.newsletter={draft:null,revision:'',loaded:false,dirty:false};$('newsletter-sections').replaceChildren();if(CareerCloud.connected)connectionsData=await CareerCloud.load();}render();toast('Dashboard aggiornata');}catch(e){toast(e.message);}};
 $('run-all').onclick=()=>runReviews();$('publish').onclick=async()=>{try{toast('Pubblicazione in corso…');const result=await localAPI('publish',{});toast(result.message);}catch(e){toast(e.message);}};
 $('linkedin-login').onclick=async()=>{try{const result=await localAPI('linkedin-login',{});toast(result.message);}catch(e){toast(e.message);}};
