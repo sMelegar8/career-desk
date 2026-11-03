@@ -7,5 +7,9 @@
   "catalog": {
     "url": "catalog.gz.enc",
     "compression": "gzip"
+  },
+  "details": {
+    "url": "details.gz.enc",
+    "compression": "gzip"
   }
 }

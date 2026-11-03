@@ -97,6 +97,24 @@ async function readCatalog(){
   const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
   return catalogData(JSON.parse(await new Response(stream).text()));
 }
+// Job evidence details are a separate file (catalog split, Nov 2026): lists open at once, details load after.
+async function readDetails(){
+  if(model.local)return localAPI('catalog-details');
+  const info=model.config.details;if(!info)return {version:1,jobs:{}};
+  const bytes=await decrypt(await fetchJSON(info.url));
+  const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return JSON.parse(await new Response(stream).text());
+}
+function ensureDetails(){
+  if(!model.detailsPromise){const session=model.session;model.detailsPromise=readDetails().then(value=>{if(session===model.session)model.details=value?.jobs||{};}).catch(()=>{model.details={};toast('Dettagli degli annunci non disponibili.');});}
+  return model.detailsPromise;
+}
+function applyDetail(row){
+  const detail=model.details?.[row.id];if(!detail||row.detail_applied)return;
+  if(detail.fit)row.fit=Object.assign(row.fit||{},detail.fit);
+  for(const profile of row.profile_matches?.profiles||[])if(detail.profiles?.[profile.id])Object.assign(profile,detail.profiles[profile.id]);
+  row.detail_applied=true;
+}
 async function unlock(password){
   model.config=await fetchJSON('config.json');model.key=await derive(password);
   model.data=await readCatalog();
@@ -109,13 +127,13 @@ async function unlock(password){
   $('linkedin-login').hidden=!model.local;
   $('agent-mode').textContent=model.local?'Agenti locali collegati':'Agenti sul PC';
   $('agent-count').textContent=model.local?'Stato in aggiornamento':'Consultazione da web';
-  populateAreas();render();await persist(false);
+  populateAreas();render();ensureDetails();await persist(false);
   document.dispatchEvent(new Event('career-ready'));
   if(['agent','tracker','sheet'].includes(model.view)&&AgentSaved.available())await loadAgentCollection();
   if(model.view==='newsletter'&&canConfigure())await loadNewsletterConfig();
   if(model.local)refreshWorker();
 }
-async function refreshWorker(){if(!model.local||!model.data||document.hidden||refreshWorker.pending)return;refreshWorker.pending=true;const session=model.session;try{const state=await localAPI('status');if(session!==model.session||!model.data)return;$('agent-count').textContent=state.running?'Ciclo di revisione in corso':'Nessun ciclo in esecuzione';model.running=state.running;renderSystem(state.system);if(model.revision!==undefined&&model.revision!==state.revision){model.revision=state.revision;const data=await readCatalog();if(session!==model.session||!model.data)return;model.data=data;model.checks=merge(model.data.state,model.checks);render();}model.revision=state.revision;}catch{$('agent-count').textContent='Connessione locale da verificare';}finally{refreshWorker.pending=false;}}
+async function refreshWorker(){if(!model.local||!model.data||document.hidden||refreshWorker.pending)return;refreshWorker.pending=true;const session=model.session;try{const state=await localAPI('status');if(session!==model.session||!model.data)return;$('agent-count').textContent=state.running?'Ciclo di revisione in corso':'Nessun ciclo in esecuzione';model.running=state.running;renderSystem(state.system);if(model.revision!==undefined&&model.revision!==state.revision){model.revision=state.revision;const data=await readCatalog();if(session!==model.session||!model.data)return;model.data=data;model.details=null;model.detailsPromise=null;ensureDetails();model.checks=merge(model.data.state,model.checks);render();}model.revision=state.revision;}catch{$('agent-count').textContent='Connessione locale da verificare';}finally{refreshWorker.pending=false;}}
 async function persist(sync=true){
   const snapshot=structuredClone(model.checks),version=dirtyVersion;
   model.save=model.save.catch(()=>{}).then(async()=>{
@@ -337,7 +355,7 @@ function renderMetrics(){
     $('metric-review').textContent=model.agentRows.filter(r=>r.ai_reviewed).length;
   }
   $('budget-info').textContent='Claude · abbonamento, nessuna API a consumo';
-  renderSystem(d.system);
+  renderSystem(d.system);renderSyncAlert(d.linkedin_sync);
   $('budget-info').title='Claude Code sul PC con il token dell’abbonamento; chiavi API escluse';
 }
 function allRows(){const d=model.data;switch(model.view){case'tracker':return applicationRows().filter(r=>tracked(r));case'agent':return model.agentRows;case'saved':return d.jobs.filter(j=>j.saved);case'companies':return d.companies;case'documents':return (d.base_cvs||[]).map(base=>({...base,id:'base:'+base.id,base_id:base.id,name:`CV ${base.id} · ${base.label_it}`,role:(base.target_role_families||[]).join(' · '),kind:'base'}));case'reviews':return [...d.companies.filter(c=>c.review),...d.jobs.filter(j=>j.complete)];default:return d.jobs;}}
@@ -472,6 +490,16 @@ function showBaseDetail(row){
   $('detail').showModal();icons();
 }
 function section(parent,title){const s=node('section',undefined,'detail-section');s.append(node('h3',title));parent.append(s);return s;}
+// Red banner when LinkedIn has not been read completely for 36 h or its last read did not recognise the page:
+// a platform layout change must never leave the tracker silently stale (3 Nov 2026).
+function renderSyncAlert(sync){
+  const el=$('sync-alert');if(!el)return;
+  const problems=[],hours=value=>value?(Date.now()-Date.parse(value))/36e5:Infinity,day=value=>value?new Date(value).toLocaleString('it-IT'):'mai';
+  if(sync&&hours(sync.saved_complete_at)>36)problems.push(`annunci salvati fermi al ${day(sync.saved_complete_at)}`);
+  if(sync&&sync.applications_checked_at&&!sync.applications_ok)problems.push(`candidature LinkedIn non lette (${day(sync.applications_checked_at)})`);
+  if(sync&&sync.indeed_state==='login_required')problems.push('Indeed richiede di nuovo l’accesso');
+  el.hidden=!problems.length;el.textContent=problems.length?`LinkedIn non aggiornato: ${problems.join(' · ')}. Chiedi a Claude di controllare la lettura di LinkedIn.`:'';
+}
 function renderSystem(system){
   const el=$('system-health');if(!el)return;
   const q=system?.queue?.counts||{},sync=system?.linkedin||{};
@@ -655,6 +683,7 @@ async function previewNewsletter(){
   finally{if(session===model.session){n.previewLoading=false;newsletterStatus();}}
 }
 function showDetail(row){
+  if(row.detail_split&&!row.detail_applied){if(model.details){applyDetail(row);}else{toast('Caricamento dettagli…');ensureDetails().then(()=>{applyDetail(row);row.detail_applied=true;showDetail(row);});return;}}
   $('detail-company').textContent=row.company||row.name;$('detail-title').textContent=row.title||row.role;$('detail-location').textContent=row.location||row.place||'';
   const root=$('detail-content');root.replaceChildren();const actions=node('div',undefined,'actions');
   if(row.kind==='agent'){
@@ -767,7 +796,7 @@ $('settings').onclick=()=>{$('sync-dialog').showModal();};
 $('sync-now').onclick=async()=>{model.token=$('github-token').value.trim();$('github-token').value='';try{await githubSync();$('sync-message').textContent='Candidature, CV associati e lettere sincronizzati.';}catch(e){$('sync-message').textContent=e.message;}};
 $('export-state').onclick=async()=>saveBlob(JSON.stringify(await encrypt(model.checks)),'Career_Desk_Candidature.enc','application/json');
 $('import-state').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;const incoming=JSON.parse(dec.decode(await decrypt(JSON.parse(await file.text()))));model.checks=merge(model.checks,incoming);await persist();render();toast('Spunte importate');}catch{toast('File non valido o cifrato con un’altra password');}e.target.value='';};
-$('lock').onclick=async()=>{CareerApplicationMail.lock();CareerCloud.lock();for(const input of document.querySelectorAll('#connections-panel input'))input.value='';$('connections-panel').replaceChildren();clearTimeout(saveTimer);await persist(false);await model.save;applicationCache=null;documentCache=null;model.session++;AgentSaved.lock();model.agentRows=[];$('agent-token').value='';$('agent-message').textContent='';$('count-agent').textContent='0';model.data=null;model.key=null;model.token='';model.checks={version:2,rows:{}};model.newsletter={draft:null,revision:'',loaded:false,dirty:false};$('newsletter-form').reset();$('newsletter-sections').replaceChildren();$('newsletter-preview-frame').removeAttribute('srcdoc');$('newsletter-preview-frame').hidden=true;$('workspace').hidden=true;$('rows').replaceChildren();$('detail-content').replaceChildren();$('linkedin-profile-panel').replaceChildren();$('linkedin-cv-panel').replaceChildren();$('parma-research-panel').replaceChildren();$('integrations-panel').replaceChildren();$('intelligence-panel').replaceChildren();$('connections-panel').replaceChildren();connectionsData=null;connectionsDirty=false;document.querySelectorAll('dialog').forEach(d=>d.close());$('login').hidden=false;};
+$('lock').onclick=async()=>{CareerApplicationMail.lock();CareerCloud.lock();for(const input of document.querySelectorAll('#connections-panel input'))input.value='';$('connections-panel').replaceChildren();clearTimeout(saveTimer);await persist(false);await model.save;applicationCache=null;documentCache=null;model.session++;AgentSaved.lock();model.agentRows=[];$('agent-token').value='';$('agent-message').textContent='';$('count-agent').textContent='0';model.data=null;model.details=null;model.detailsPromise=null;model.key=null;model.token='';model.checks={version:2,rows:{}};model.newsletter={draft:null,revision:'',loaded:false,dirty:false};$('newsletter-form').reset();$('newsletter-sections').replaceChildren();$('newsletter-preview-frame').removeAttribute('srcdoc');$('newsletter-preview-frame').hidden=true;$('workspace').hidden=true;$('rows').replaceChildren();$('detail-content').replaceChildren();$('linkedin-profile-panel').replaceChildren();$('linkedin-cv-panel').replaceChildren();$('parma-research-panel').replaceChildren();$('integrations-panel').replaceChildren();$('intelligence-panel').replaceChildren();$('connections-panel').replaceChildren();connectionsData=null;connectionsDirty=false;document.querySelectorAll('dialog').forEach(d=>d.close());$('login').hidden=false;};
 $('refresh').onclick=async()=>{if(model.view==='notifications'&&canConfigure()){await CareerApplicationMail.refresh();return;}if(model.view==='connections'&&canConfigure()){await loadConnections(true);return;}if(model.view==='integrations'&&!model.local&&CareerCloud.connected){try{await refreshIntegrationData();toast('Configurazione aggiornata');}catch(e){toast(e.message);}return;}if(model.view==='newsletter'&&canConfigure()){await loadNewsletterConfig();return;}if(model.view==='agent'){await loadAgentCollection();return;}try{if(model.local){model.data=await readCatalog();model.checks=merge(model.data.state,model.checks);}else{model.config=await fetchJSON('config.json');model.data=await readCatalog();const shared=JSON.parse(dec.decode(await decrypt(await fetchJSON('state.enc'))));model.checks=merge(model.data.state,shared,model.checks);model.newsletter={draft:null,revision:'',loaded:false,dirty:false};$('newsletter-sections').replaceChildren();if(CareerCloud.connected)connectionsData=await CareerCloud.load();}render();toast('Dashboard aggiornata');}catch(e){toast(e.message);}};
 $('run-all').onclick=()=>runReviews();$('publish').onclick=async()=>{try{toast('Pubblicazione in corso…');const result=await localAPI('publish',{});toast(result.message);}catch(e){toast(e.message);}};
 $('linkedin-login').onclick=async()=>{try{const result=await localAPI('linkedin-login',{});toast(result.message);}catch(e){toast(e.message);}};
