@@ -84,7 +84,8 @@ function setApplicationRow(row,change){
   const record=applicationRecord(row),state={...applicationState(record),...change},updatedAt=new Date().toISOString();
   if(Object.hasOwn(change,'checked')&&!Object.hasOwn(change,'stage'))state.stage=change.checked?(applicationStages.includes(state.stage)?state.stage:'applied'):'planned';
   for(const id of record.state_ids||[])if(id!==record.id&&model.checks.rows[id])model.checks.rows[id]={...model.checks.rows[id],...state,updatedAt};
-  setRow(record.id,state);if(model.view==='tracker')render();
+  // The tracker sheet refreshes its own cells; a full render here would drop the cursor while typing.
+  setRow(record.id,state);
 }
 const storageKey=()=> 'career-desk-state-'+model.config.salt;
 async function localAPI(path,body){if(!model.local&&CareerCloud.connected)return CareerCloud.request(path,body);return fetchJSON('/api/'+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-Desk-Client':'1','X-CSRF-Token':model.csrf},...(body?{body:JSON.stringify(body)}:{})});}
@@ -392,8 +393,9 @@ function render(){
   renderMetrics();$('view-title').textContent=labels[model.view];
   $('agent-panel').hidden=model.view!=='agent';
   const extra=['connections','integrations','intelligence','notifications'].includes(model.view);$('notifications-panel').hidden=model.view!=='notifications';$('connections-panel').hidden=model.view!=='connections';$('integrations-panel').hidden=model.view!=='integrations';$('intelligence-panel').hidden=model.view!=='intelligence';
-  const sheet=model.view==='sheet';$('sheet-panel').hidden=!sheet;
-  const parma=model.view==='parma-research'||sheet,impact=model.view==='impact',newsletter=model.view==='newsletter',tracker=model.view==='tracker',linkedin=model.view==='linkedin-profile'||model.view==='linkedin-cv',linkedinCv=model.view==='linkedin-cv',portfolioReview=model.view==='portfolio-review';$('parma-research-panel').hidden=!parma||sheet;$('impact-panel').hidden=!impact;$('newsletter-panel').hidden=!newsletter;$('linkedin-profile-panel').hidden=!linkedin||linkedinCv;$('linkedin-cv-panel').hidden=!linkedinCv;$('portfolio-review-panel').hidden=!portfolioReview;
+  // Since 4 Nov 2026 the tracker is the colour-coded sheet; the old 'sheet' view is an alias.
+  const sheet=model.view==='sheet'||model.view==='tracker';$('sheet-panel').hidden=!sheet;
+  const parma=model.view==='parma-research'||sheet,impact=model.view==='impact',newsletter=model.view==='newsletter',tracker=false,linkedin=model.view==='linkedin-profile'||model.view==='linkedin-cv',linkedinCv=model.view==='linkedin-cv',portfolioReview=model.view==='portfolio-review';$('parma-research-panel').hidden=!parma||sheet;$('impact-panel').hidden=!impact;$('newsletter-panel').hidden=!newsletter;$('linkedin-profile-panel').hidden=!linkedin||linkedinCv;$('linkedin-cv-panel').hidden=!linkedinCv;$('portfolio-review-panel').hidden=!portfolioReview;
   for(const selector of ['.metrics','.toolbar','.search','.filter-drawer','.table-wrap','.pagination','#results-status','#empty'])document.querySelector(selector).hidden=parma||impact||newsletter||linkedin||portfolioReview||extra;
   document.querySelector('.metrics').hidden=parma||impact||newsletter||linkedin||portfolioReview||extra||tracker;
   $('status').hidden=tracker;$('tracker-stage').hidden=!tracker;
@@ -410,7 +412,7 @@ function render(){
   document.querySelectorAll('[data-view]').forEach(b=>{b.classList.toggle('active',b.dataset.view===model.view);b.setAttribute('aria-current',b.dataset.view===model.view?'page':'false');});
   renderTrackerSummary(tracker);
   if(extra){$('view-subtitle').textContent='';if(model.view==='notifications')CareerApplicationMail.render();else if(model.view==='connections')renderConnections();else if(model.view==='integrations')renderIntegrations();else renderJobIntelligence();return;}
-  if(sheet){$('view-subtitle').textContent='Tutte le candidature in un foglio: ordina, filtra, modifica ed esporta in Excel.';CareerSheet.render($('sheet-panel'));return;}
+  if(sheet){$('view-subtitle').textContent='Le tue candidature: colori per fase, filtri per colonna, ordinamento ed export in Excel.';CareerSheet.render($('sheet-panel'));return;}
   if(parma){renderParmaResearch();return;}
   if(impact){renderImpact();return;}
   if(newsletter){renderNewsletter();return;}
@@ -498,7 +500,8 @@ function renderSyncAlert(sync){
   if(sync&&hours(sync.saved_complete_at)>36)problems.push(`annunci salvati fermi al ${day(sync.saved_complete_at)}`);
   if(sync&&sync.applications_checked_at&&!sync.applications_ok)problems.push(`candidature LinkedIn non lette (${day(sync.applications_checked_at)})`);
   if(sync&&sync.indeed_state==='login_required')problems.push('Indeed richiede di nuovo l’accesso');
-  el.hidden=!problems.length;el.textContent=problems.length?`LinkedIn non aggiornato: ${problems.join(' · ')}. Chiedi a Claude di controllare la lettura di LinkedIn.`:'';
+  if(sync&&'email_checked_at' in sync&&hours(sync.email_checked_at)>24)problems.push(`email delle candidature non lette dal ${day(sync.email_checked_at)} (ricollega Gmail nei connettori di Claude)`);
+  el.hidden=!problems.length;el.textContent=problems.length?`Career Desk non aggiornato: ${problems.join(' · ')}. Chiedi a Claude di controllare le letture automatiche.`:'';
 }
 function renderSystem(system){
   const el=$('system-health');if(!el)return;
@@ -773,7 +776,7 @@ async function githubSync(){
 }
 async function runReviews(ids=[]){if(!model.local)return;const text=ids.length?'Accodare la revisione di questo annuncio?':'Accodare le revisioni mancanti di tutti gli annunci completi?';if(!confirm(text+' Claude con il tuo abbonamento (consuma i limiti del piano), nessuna API a consumo. Pubblicazione su Drive solo dopo tutti i controlli. Non invia candidature.'))return;try{const r=await localAPI('review',{ids});toast(r.message);}catch(e){toast(e.message);}}
 $('unlock-form').addEventListener('submit',async e=>{e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;$('login-error').textContent='';try{await unlock($('password').value);}catch{$('login-error').textContent='Accesso non riuscito. Controlla password e connessione.';model.key=null;}finally{b.disabled=false;}});
-function viewFromHash(){const view=location.hash.slice(1);return view==='agent-saved'?'agent':Object.hasOwn(labels,view)?view:null;}
+function viewFromHash(){const view=location.hash.slice(1);return view==='agent-saved'?'agent':view==='sheet'?'tracker':Object.hasOwn(labels,view)?view:null;}
 function closeNavigation(){if(window.matchMedia('(max-width:760px)').matches){$('career-navigation').classList.remove('nav-open');$('navigation-toggle').setAttribute('aria-expanded','false');$('navigation-toggle').setAttribute('aria-label','Apri menu');}}
 $('navigation-toggle').onclick=()=>{const open=$('career-navigation').classList.toggle('nav-open');$('navigation-toggle').setAttribute('aria-expanded',String(open));$('navigation-toggle').setAttribute('aria-label',open?'Chiudi menu':'Apri menu');};
 function selectView(view){if(!Object.hasOwn(labels,view))return;closeNavigation();model.view=view;model.page=0;if(!model.data)return;render();if(['agent','tracker','sheet'].includes(model.view)&&AgentSaved.available())loadAgentCollection();if(model.view==='newsletter'&&canConfigure()&&!model.newsletter.loaded)loadNewsletterConfig();}
@@ -802,3 +805,5 @@ $('run-all').onclick=()=>runReviews();$('publish').onclick=async()=>{try{toast('
 $('linkedin-login').onclick=async()=>{try{const result=await localAPI('linkedin-login',{});toast(result.message);}catch(e){toast(e.message);}};
 (async()=>{model.view=viewFromHash()||model.view;icons();try{if(location.hostname==='127.0.0.1'||location.hostname==='localhost'){const runtime=await localAPI('runtime');model.local=runtime.local;model.csrf=runtime.csrf;if(runtime.password){await unlock(runtime.password);return;}}}catch(e){console.warn('Local dashboard access failed:',e.name,e.message);$('login-error').textContent='Accesso locale non riuscito: '+e.message;}const params=new URLSearchParams(location.hash.slice(1));const password=params.get('key');if(password){history.replaceState(null,'',location.pathname+location.search);try{await unlock(password);}catch{$('login-error').textContent='Accesso automatico non riuscito.';}}})();
 setInterval(refreshWorker,10000);
+// Edits made in a job's detail dialog show in the tracker sheet as soon as the dialog closes.
+$('detail').addEventListener('close',()=>{if(model.data&&['tracker','sheet'].includes(model.view))CareerSheet.render();});
