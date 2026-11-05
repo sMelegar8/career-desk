@@ -501,7 +501,10 @@ function section(parent,title){const s=node('section',undefined,'detail-section'
 // a platform layout change must never leave the tracker silently stale (3 Nov 2026).
 function renderSyncAlert(sync){
   const el=$('sync-alert');if(!el)return;
-  const problems=[],hours=value=>value?(Date.now()-Date.parse(value))/36e5:Infinity,day=value=>value?new Date(value).toLocaleString('it-IT'):'mai';
+  // On the PC the catalog is live; the phone shows a published snapshot, so ages are measured at its
+  // publication time: the banner reports a read that was already stale when the data were published.
+  const reference=model.local?Date.now():Date.parse(model.data?.updated_at)||Date.now();
+  const problems=[],hours=value=>value?(reference-Date.parse(value))/36e5:Infinity,day=value=>value?new Date(value).toLocaleString('it-IT'):'mai';
   if(sync&&hours(sync.saved_complete_at)>36)problems.push(`annunci salvati fermi al ${day(sync.saved_complete_at)}`);
   if(sync&&sync.applications_checked_at&&!sync.applications_ok)problems.push(`candidature LinkedIn non lette (${day(sync.applications_checked_at)})`);
   if(sync&&sync.indeed_state==='login_required')problems.push('Indeed richiede di nuovo l’accesso');
