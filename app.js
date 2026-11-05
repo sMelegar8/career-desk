@@ -401,7 +401,7 @@ function render(){
   $('status').hidden=tracker;$('tracker-stage').hidden=!tracker;
   document.querySelector('table').classList.toggle('tracker-table',tracker);
   const headings=document.querySelectorAll('thead th');headings[2].textContent=tracker?'Stato': 'Sede';headings[3].textContent=tracker?'Invio / Follow-up':'Documenti';headings[4].textContent=tracker?'Canale / CV / Esito':'Revisione';
-  $('view-subtitle').textContent=model.view==='companies'?'Target e candidature spontanee, non vacancy confermate':model.view==='documents'?'I quattro CV base approvati: stesso file per tutti gli annunci della famiglia.':'Annunci archiviati: verifica l’apertura prima della candidatura';
+  $('view-subtitle').textContent=model.view==='companies'?'Target e candidature spontanee, non vacancy confermate':model.view==='documents'?'I CV nelle cartelle di Drive (CV Base 2026-10): la lista si aggiorna da sola quando cambiano i file.':'Annunci archiviati: verifica l’apertura prima della candidatura';
   if(model.view==='agent')$('view-subtitle').textContent='Pacchetti conservati tramite Mi interessa: accesso privato e verifica prima dell\'invio';
   if(impact)$('view-subtitle').textContent='Dati verificabili per riscrivere i CV con risultati concreti';
   if(tracker)$('view-subtitle').textContent='Candidature aggiornate dalle email selezionate e dalle tue modifiche. Nessun invio dalla dashboard.';
@@ -466,13 +466,18 @@ function render(){
   $('rows').append(fragment);
   $('previous').disabled=model.page===0;$('next').disabled=model.page>=pages-1;$('page-count').textContent=`${model.page+1} / ${pages}`;icons();
 }
-// Library row for one of the four approved base CVs: files live in its Drive folder.
+// Library row for a CV folder on Drive: files live in that Drive folder.
 function baseCVRow(row){
   const tr=node('tr'),main=node('td');tr.dataset.id=row.id;main.append(node('div',row.name,'company'),node('div',row.label_en,'role'),node('div',row.role,'subline'));
   const files=node('td'),actions=node('div',undefined,'file-actions');
   if(row.drive_folder_url)actions.append(safeLink(row.drive_folder_url,'Apri su Drive'));else actions.append(node('span','Link Drive mancante','muted'));
   files.append(actions,node('div',Object.values(row.files||{}).map(f=>f.name).join(' · '),'subline'));
-  const status=node('td');status.append(node('span','Approvato '+new Date(row.approved_at+'T00:00:00').toLocaleDateString('it-IT')+(row.version_label?' · '+row.version_label:''),'badge ready'));
+  const status=node('td'),when=row.modified_at?new Date(row.modified_at).toLocaleDateString('it-IT'):'';
+  // Drive is the source of truth (4 Nov 2026): the badge says whether the file there matches the approval.
+  if(row.status==='not_registered')status.append(node('span','Su Drive · non nel registro','badge review'),node('div','Non usato per la scelta automatica del CV','subline'));
+  else if(row.status==='changed')status.append(node('span','Modificato su Drive dopo l’approvazione','badge warn'),node('div','Approvazione del '+new Date(row.approved_at+'T00:00:00').toLocaleDateString('it-IT')+': da registrare','subline'));
+  else status.append(node('span','Approvato '+new Date(row.approved_at+'T00:00:00').toLocaleDateString('it-IT')+(row.version_label?' · '+row.version_label:''),'badge ready'));
+  if(when)files.append(node('div','Su Drive: '+when,'subline'));
   const open=node('td',undefined,'open-cell');const b=button('','chevron-right',()=>showBaseDetail(row),'icon');b.title='Keyword del CV';b.setAttribute('aria-label','Keyword di '+row.name);open.append(b);
   tr.append(node('td',undefined,'check-cell'),main,node('td','Drive','location-cell'),files,status,open);return tr;
 }
