@@ -18,7 +18,7 @@ const CareerSheet=(()=>{
   const groupOf=stage=>(groups.find(g=>g[2].includes(stage))||groups[0])[0];
   // [key, heading, kind, width, visible by default]; kind: text/date editable, ro read only.
   const columns=[
-    ['company','Azienda','ro',170,true],['role','Ruolo','ro',230,true],['place','Sede','ro',140,true],
+    ['favorite','★','fav',52,true],['company','Azienda','ro',170,true],['role','Ruolo','ro',230,true],['place','Sede','ro',140,true],
     ['stage','Fase','stage',150,true],['submitted_on','Invio','date',130,true],['follow_up','Follow-up','date',130,true],
     ['channel','Canale','text',150,true],['recruiter','Recruiter / contatto','text',170,true],['outcome','Esito','text',190,true],
     ['note','Note','text',240,true],['link','Annuncio','link',80,true],
@@ -37,6 +37,7 @@ const CareerSheet=(()=>{
   function value(row,key){
     const state=applicationState(row);
     switch(key){
+      case'favorite':return state.favorite===true?'★':'';
       case'company':return row.company||row.name||'';
       case'role':return cleanTitle(row.title||row.role||'');
       case'place':return String(row.location||row.place||'').replace(/^None\s*/,'').trim();
@@ -58,10 +59,11 @@ const CareerSheet=(()=>{
   function base(){return applicationRows().filter(r=>r.kind!=='document'&&(view.all||tracked(r)));}
   function matches(row,skip){
     const q=view.query.toLocaleLowerCase('it');
-    if(skip!=='group'&&view.group&&(view.group==='due'?!isFollowUpDue(row):groupOf(applicationStage(row))!==view.group))return false;
+    if(skip!=='group'&&view.group&&(view.group==='due'?!isFollowUpDue(row):view.group==='favorite'?applicationState(row).favorite!==true:groupOf(applicationStage(row))!==view.group))return false;
     for(const [key,needle]of Object.entries(view.filters)){
       if(!needle)continue;
       if(key==='stage'){if(applicationStage(row)!==needle)return false;continue;}
+      if(key==='favorite'){if((needle==='yes')!==(applicationState(row).favorite===true))return false;continue;}
       if(!display(row,key).toLocaleLowerCase('it').includes(needle.toLocaleLowerCase('it')))return false;
     }
     return !q||columns.some(([key])=>display(row,key).toLocaleLowerCase('it').includes(q));
@@ -83,6 +85,7 @@ const CareerSheet=(()=>{
       select.addEventListener('change',()=>render());td.append(select);return td;
     }
     if(kind==='link'){const url=value(row,'link');if(url)td.append(safeLink(url,'Apri'));return td;}
+    if(kind==='fav'){td.className='sheet-fav';td.append(favoriteButton(row,()=>render()));return td;}
     if(kind==='ro'){td.textContent=display(row,key);td.title=td.textContent;return td;}
     const input=node('input');input.type=kind==='date'?'date':'text';input.value=value(row,key);input.maxLength=key==='note'?8000:512;
     input.title=input.value;input.setAttribute('aria-label',(columns.find(c=>c[0]===key)[1])+' – '+(row.company||row.name||''));
@@ -108,7 +111,7 @@ const CareerSheet=(()=>{
     // Prefix spreadsheet formula triggers so exported text cannot run as a formula in Excel.
     const quote=v=>{let s=String(v??'');if(/^[=+\-@\t\r]/.test(s))s="'"+s;return '"'+s.replaceAll('"','""')+'"';};
     const lines=[columns.map(c=>quote(c[1])).join(';')];
-    for(const row of list)lines.push(columns.map(([key])=>quote(key==='link'?value(row,key):display(row,key))).join(';'));
+    for(const row of list)lines.push(columns.map(([key])=>quote(key==='link'?value(row,key):key==='favorite'?(value(row,key)?'sì':''):display(row,key))).join(';'));
     return '﻿'+lines.join('\r\n');
   }
   function keepFocus(selector,fn){
@@ -117,7 +120,7 @@ const CareerSheet=(()=>{
   }
   function summary(){
     const bar=node('div',undefined,'sheet-summary'),all=base().filter(r=>matches(r,'group'));
-    const chips=[['','Tutte',all.length],...groups.map(([id,label,list])=>[id,label,all.filter(r=>list.includes(applicationStage(r))).length]),['due','Da sollecitare',all.filter(isFollowUpDue).length]];
+    const chips=[['','Tutte',all.length],['favorite','★ Preferiti',all.filter(r=>applicationState(r).favorite===true).length],...groups.map(([id,label,list])=>[id,label,all.filter(r=>list.includes(applicationStage(r))).length]),['due','Da sollecitare',all.filter(isFollowUpDue).length]];
     for(const [id,label,count]of chips){
       const chip=button('',null,()=>{view.group=view.group===id?'':id;render();},'sheet-chip stage-'+(id||'all'));
       chip.append(node('strong',String(count)),node('span',label));chip.setAttribute('aria-pressed',String(view.group===id));bar.append(chip);
@@ -137,6 +140,11 @@ const CareerSheet=(()=>{
   function filterCell(key,kind){
     const th=node('th',undefined,'sheet-filter');
     if(kind==='link')return th;
+    if(kind==='fav'){
+      const select=node('select');select.setAttribute('aria-label','Filtra i preferiti');
+      for(const [v,t]of [['','Tutti'],['yes','★'],['no','Altri']]){const o=node('option',t);o.value=v;select.append(o);}
+      select.value=view.filters.favorite||'';select.onchange=()=>{view.filters.favorite=select.value;render();};th.append(select);return th;
+    }
     if(kind==='stage'){
       const select=node('select');select.setAttribute('aria-label','Filtra la colonna Fase');
       for(const [v,t]of [['','Tutte'],...Object.entries(stages)]){const o=node('option',t);o.value=v;select.append(o);}
@@ -169,7 +177,7 @@ const CareerSheet=(()=>{
     const thead=node('thead');thead.append(head,filters);const tbody=node('tbody');
     for(const row of list){
       const tr=node('tr');for(const [key,,kind]of cols)tr.append(cell(row,key,kind));
-      const first=tr.firstChild;first.classList.add('sheet-open');first.tabIndex=0;first.title='Apri scheda completa';first.onclick=()=>showDetail(row);first.onkeydown=e=>{if(e.key==='Enter')showDetail(row);};
+      const first=tr.querySelector('td:not(.sheet-fav)')||tr.firstChild;first.classList.add('sheet-open');first.tabIndex=0;first.title='Apri scheda completa';first.onclick=()=>showDetail(row);first.onkeydown=e=>{if(e.key==='Enter')showDetail(row);};
       markRow(tr,row);tbody.append(tr);
     }
     table.append(thead,tbody);wrap.append(table);root.append(wrap);[wrap.scrollLeft,wrap.scrollTop]=scroll;

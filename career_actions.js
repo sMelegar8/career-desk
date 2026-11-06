@@ -66,6 +66,12 @@ const CareerActions=(()=>{
     if(stage==='interview')s.append(node('p','Colloquio registrato: puoi richiedere la preparazione con esempi documentati.','notice'));
     run('Richiedi lettera di presentazione','cover_letter',row.complete&&gates(row).verdict!=='FAIL');
     run('Richiedi preparazione colloquio','interview_prep',row.complete);
+    // Tailored CV only for favourites (candidate decision 6 Nov 2026); it stays a draft until approved.
+    if(applicationState(row).favorite===true){
+      const base=typeof suggestedCV==='function'?suggestedCV(row):null;
+      run('Adatta CV'+(base?' (da '+base.label+')':''),'tailored_cv',row.complete);
+      s.append(node('p','Riordina ed evidenzia solo fatti già documentati nel CV base e nelle tue conferme; le lacune restano elencate. Usa il limite giornaliero dei CV Claude.','muted'));
+    }else s.append(node('p','Metti la stellina ★ per poter adattare il CV a questo annuncio.','muted'));
     if(openStages.includes(stage)){
       if(quiet.days_quiet!==null)s.append(node('p',`${quiet.days_quiet} giorni senza attività · ${quiet.followups_sent} solleciti registrati`,'muted'));
       run('Richiedi bozza di sollecito','followup_draft',!!applicationState(row).submitted_on);
@@ -76,15 +82,22 @@ const CareerActions=(()=>{
       const article=node('article',undefined,'detail-section');article.append(node('h4',artifact.label_it||artifact.status));
       for(const format of ['pdf','docx'])if(artifact.files?.[format])article.append(button(format==='pdf'?'Apri PDF':'Scarica Word','download',async()=>{try{saveBlob(await bytes(row,artifact,format),artifact.files[format].name,'application/octet-stream');}catch(error){toast(error.message);}}));
       if(artifact.text){const text=node('textarea');text.value=artifact.text;text.readOnly=true;text.rows=7;text.setAttribute('aria-label','Sollecito da copiare');article.append(text,button('Copia sollecito','copy',()=>navigator.clipboard.writeText(artifact.text).then(()=>toast('Testo copiato.')).catch(()=>toast('Seleziona il testo e copialo.'))));}
-      if(artifact.kind==='cover_letter'&&artifact.status==='awaiting_approval'&&artifact.files?.preview_1){
-        const preview=node('div'),reviewed=node('input'),label=node('label',' Ho verificato contenuti e pagina renderizzata');reviewed.type='checkbox';reviewed.disabled=true;label.prepend(reviewed);
-        const approve=button('Approva lettera e copia su Drive','check',async()=>{approve.disabled=true;try{await request(row,'approve_cover_letter',{docx_sha:artifact.document_hashes['.docx'],pdf_sha:artifact.document_hashes['.pdf']});}catch(error){toast(error.message);approve.disabled=!reviewed.checked;}});approve.disabled=true;
+      if(artifact.kind==='tailored_cv'){
+        if(artifact.base_label)article.append(node('p','Partito da '+artifact.base_label,'muted'));
+        const list=(title,items)=>{if(!items?.length)return;article.append(node('h4',title));const ul=node('ul');for(const item of items)ul.append(node('li',item));article.append(ul);};
+        list('Modifiche',artifact.changes);list('Keyword con evidenza',(artifact.keywords||[]).map(item=>item.keyword));
+        list('Lacune (requisiti senza evidenza)',artifact.gaps?.length?artifact.gaps:['Nessuna lacuna segnalata: verifica comunque l’annuncio.']);
+      }
+      if(['cover_letter','tailored_cv'].includes(artifact.kind)&&artifact.status==='awaiting_approval'&&artifact.files?.preview_1){
+        const cv=artifact.kind==='tailored_cv',pages=Object.keys(artifact.files).filter(key=>key.startsWith('preview_')).sort();
+        const preview=node('div'),reviewed=node('input'),label=node('label',cv?' Ho verificato fatti, lacune e le due pagine renderizzate':' Ho verificato contenuti e pagina renderizzata');reviewed.type='checkbox';reviewed.disabled=true;label.prepend(reviewed);
+        const approve=button(cv?'Approva CV adattato e copia su Drive':'Approva lettera e copia su Drive','check',async()=>{approve.disabled=true;try{await request(row,'approve_'+artifact.kind,{docx_sha:artifact.document_hashes['.docx'],pdf_sha:artifact.document_hashes['.pdf']});}catch(error){toast(error.message);approve.disabled=!reviewed.checked;}});approve.disabled=true;
         reviewed.onchange=()=>{approve.disabled=!reviewed.checked||!available;};
-        article.append(button('Mostra pagina da approvare','eye',async()=>{try{const data=await bytes(row,artifact,'preview_1'),url=URL.createObjectURL(new Blob([data],{type:'image/png'})),image=node('img');image.alt='Pagina renderizzata della lettera';image.style.width='100%';image.onload=()=>{reviewed.disabled=false;URL.revokeObjectURL(url);};image.src=url;preview.replaceChildren(image);}catch(error){toast(error.message);}}),preview,label,approve);
+        article.append(button(cv?'Mostra le pagine da approvare':'Mostra pagina da approvare','eye',async()=>{try{const images=[];for(const key of pages){const data=await bytes(row,artifact,key),url=URL.createObjectURL(new Blob([data],{type:'image/png'})),image=node('img');image.alt='Pagina renderizzata '+key.slice(8)+(cv?' del CV adattato':' della lettera');image.style.width='100%';image.onload=()=>URL.revokeObjectURL(url);image.src=url;images.push(image);}preview.replaceChildren(...images);reviewed.disabled=false;}catch(error){toast(error.message);}}),preview,label,approve);
       }
       s.append(article);
     }
-    s.append(node('p','Le bozze non vengono inviate. La lettera usa il CV base assegnato e richiede approvazione prima della copia su Drive.','muted'));
+    s.append(node('p','Le bozze non vengono inviate. Lettera e CV adattato richiedono la tua approvazione (legata agli hash dei file) prima della copia su Drive.','muted'));
   }
   return {quietSummary,gateNotes,badges,renderDocuments};
 })();

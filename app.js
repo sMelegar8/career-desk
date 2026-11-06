@@ -30,6 +30,7 @@ function merge(...states){
     if(!row||typeof row.checked!=='boolean'||!Number.isFinite(Date.parse(row.updatedAt))||['__proto__','constructor','prototype'].includes(id))continue;
     const clean={checked:row.checked,updatedAt:row.updatedAt};
     for(const field of ['note','stage','deadline','submitted_on','follow_up','channel','cv_version','cv_sha256','outcome','matched_cv_id','matched_cv_sha256','cover_letter','cover_letter_language','cover_letter_cv_sha256','recruiter','interview_on'])if(Object.hasOwn(row,field))clean[field]=String(row[field]??'').slice(0,field==='cover_letter'?16000:field==='note'?8000:512);
+    if(typeof row.favorite==='boolean')clean.favorite=row.favorite;
     if(Number.isInteger(row.base_cv_override)&&row.base_cv_override>=1&&row.base_cv_override<=4&&Number.isFinite(Date.parse(row.base_cv_override_at||row.updatedAt))){clean.base_cv_override=row.base_cv_override;clean.base_cv_override_at=row.base_cv_override_at||row.updatedAt;}
     const previous=out.rows[id];
     // Older clients omit new fields; an explicit empty string still clears a field.
@@ -63,7 +64,7 @@ function applicationRows(){
   const known=new Set([...grouped.values()].flatMap(r=>r.state_ids));
   const byState=new Map([...grouped.values()].flatMap(r=>r.state_ids.map(id=>[id,r])));
   for(const id of Object.keys(model.checks.rows)){if(known.has(id))continue;const target=byState.get(CareerApplicationMail.alias(id));if(target){target.state_ids.push(id);known.add(id);}}
-  for(const [id,state]of Object.entries(model.checks.rows))if(!known.has(id)&&!id.startsWith('impact:')&&!id.startsWith('cv:')&&(state.checked||applicationStages.includes(state.stage)||['interested','drafted'].includes(state.stage)||state.matched_cv_id))grouped.set('archived:'+id,{id,kind:'archived',name:'Record archiviato',role:id,state_ids:[id],sources:['archived']});
+  for(const [id,state]of Object.entries(model.checks.rows))if(!known.has(id)&&!id.startsWith('impact:')&&!id.startsWith('cv:')&&(state.favorite===true||state.checked||applicationStages.includes(state.stage)||['interested','drafted'].includes(state.stage)||state.matched_cv_id))grouped.set('archived:'+id,{id,kind:'archived',name:'Record archiviato',role:id,state_ids:[id],sources:['archived']});
   const rows=[...grouped.values()],byId=new Map();
   for(const row of rows)for(const id of row.state_ids)byId.set(id,row);
   applicationCache={data:model.data,agents:model.agentRows,checks:model.checks,rows,byId,states:new Map()};
@@ -314,6 +315,38 @@ function baseCVInfo(row){
   const id=override?manual:base.base_id;
   return {id,override:override||base.override===true,label:id?`CV ${id} · ${override?baseCVLabels[id]:base.label_it||baseCVLabels[id]}`:'CV da scegliere'};
 }
+// Favourites and the suggested CV (candidate request 6 Nov 2026): shown first in every card/row.
+function isFavorite(row){return applicationState(row).favorite===true;}
+function isApplied(row){const state=applicationState(row);return !!state.checked||applicationStages.includes(state.stage);}
+function suggestedCV(row){
+  const record=applicationRecord(row),source=record.base_cv?record:row,base=source.base_cv;
+  if(!base)return null;
+  const info=baseCVInfo(source),id=info.id||base.suggested_base_id;
+  if(!id)return null;
+  const library=(model.data.base_cvs||[]).find(item=>String(item.id)===String(id));
+  return {id,label:`CV ${id} · ${baseCVLabels[id]||library?.label_it||''}`,confirmed:!!info.id,manual:!!info.override,url:library?.drive_folder_url||''};
+}
+function suggestedCVBadge(row){
+  const cv=suggestedCV(row);if(!cv)return null;
+  const box=node('div',undefined,'cv-suggest');box.append(node('span','CV suggerito','cv-suggest-label'));
+  let name=node('strong',cv.label);
+  try{if(cv.url&&new URL(cv.url).protocol==='https:'){name=node('a',cv.label);name.href=cv.url;name.target='_blank';name.rel='noopener noreferrer';name.title='Apri la cartella del CV su Drive';name.addEventListener('click',event=>event.stopPropagation());}}catch{}
+  box.append(name);
+  if(cv.manual)box.append(node('span','scelta manuale','cv-suggest-note'));else if(!cv.confirmed)box.append(node('span','da confermare','cv-suggest-note'));
+  box.title=cv.confirmed?'CV base scelto in modo deterministico (o manuale) tra quelli approvati.':'Punteggi vicini: è il CV più vicino, conferma la scelta nella scheda.';
+  return box;
+}
+function favoriteButton(row,after){
+  const on=isFavorite(row),name=row.company||row.name||'';
+  const b=button('','star',event=>{event.stopPropagation();setApplicationRow(row,{favorite:!isFavorite(row)});toast(isFavorite(row)?'Aggiunto ai preferiti.':'Tolto dai preferiti.');(after||render)();},'icon fav-star'+(on?' on':''));
+  b.setAttribute('aria-pressed',String(on));b.setAttribute('aria-label',(on?'Togli dai preferiti ':'Aggiungi ai preferiti ')+name);b.title=on?'Preferito: tocca per togliere':'Aggiungi ai preferiti';
+  return b;
+}
+function rowLead(row,after){
+  const lead=node('div',undefined,'row-lead');lead.append(favoriteButton(row,after));
+  if(!isApplied(row)){const badge=suggestedCVBadge(row);if(badge)lead.append(badge);}
+  return lead;
+}
 function baseCVChoice(parent,row){
   if(row.kind!=='job')return;
   const s=section(parent,'CV base'),info=baseCVInfo(row);
@@ -386,7 +419,7 @@ function visibleRows(){const q=$('search').value.toLocaleLowerCase('it'),area=$(
   if(area&&!`${r.location||r.place||''} ${r.g||''}`.toLowerCase().includes(area))return false;
   const checked=!!state.checked;
   if(model.view==='tracker'){const stage=$('tracker-stage').value;return !stage||(stage==='sent'?checked:stage==='due'?isFollowUpDue(r):stage==='stale'?CareerActions.quietSummary(state).stale:applicationStage(r)===stage);}
-  return !(status==='sent'&&!checked||status==='unsent'&&checked||status==='ready'&&!(state.matched_cv_id?getDoc(r)?.ready:r.cv_ready)||status==='complete'&&!r.complete||status==='incomplete'&&(r.complete||r.kind!=='job'));
+  return !(status==='favorite'&&state.favorite!==true||status==='sent'&&!checked||status==='unsent'&&checked||status==='ready'&&!(state.matched_cv_id?getDoc(r)?.ready:r.cv_ready)||status==='complete'&&!r.complete||status==='incomplete'&&(r.complete||r.kind!=='job'));
 }).sort((a,b)=>compareRows(a,b,$('sort-order').value));}
 function render(){
   CareerApplicationMail.apply(model.data.application_mail);renderExplorerFilters();
@@ -425,7 +458,7 @@ function render(){
     if(row.kind==='base'){fragment.append(baseCVRow(row));continue;}
     const state=applicationState(row),tr=node('tr');tr.dataset.id=row.id;tr.classList.toggle('sent',!!state.checked);
     const check=node('td',undefined,'check-cell');if(row.kind!=='document'){const input=node('input');input.type='checkbox';input.checked=!!state.checked;input.setAttribute('aria-label','Candidatura già inviata a '+(row.company||row.name));input.addEventListener('change',()=>{setApplicationRow(row,{checked:input.checked});if(!tracker)render();});check.append(input);}
-    const main=node('td');main.append(node('div',row.company||row.name,'company'),node('div',row.title||row.role,'role'));
+    const main=node('td');if(row.kind==='job'||row.kind==='agent')main.append(rowLead(row));main.append(node('div',row.company||row.name,'company'),node('div',row.title||row.role,'role'));
     if(row.kind==='job'||row.fit){
       const score=alignmentScore(row),summary=node('div',undefined,'alignment-summary');
       const badge=node('span',score===null?'Allineamento n.d.':state.matched_cv_id?`CV selezionato ${score}/100`:`Allineamento ${score}/100`,'badge alignment-score');
@@ -436,7 +469,7 @@ function render(){
     }
     if(row.kind==='job'){
       CareerActions.badges(main,row);
-      const base=baseCVInfo(row);main.append(node('div',base.label+(base.override?' · Scelta manuale':''),'subline'));
+      if(isApplied(row)){const base=baseCVInfo(row);main.append(node('div',base.label+(base.override?' · Scelta manuale':''),'subline'));}
       main.append(node('div',row.saved?'Salvato LinkedIn':'Ricerca archiviata','subline'));
       const observed=row.first_seen_at||row.captured_at;
       if(row.saved&&observed)main.append(node('div','Rilevato il '+new Date(observed).toLocaleDateString('it-IT'),'subline'));
@@ -538,7 +571,7 @@ function applicationFields(parent,row,doc){
   if(doc?.files?.pdf?.sha256)s.append(button('Registra questo CV','file-check',()=>{setApplicationRow(row,{cv_sha256:doc.files.pdf.sha256,cv_version:doc.files.pdf.name||doc.folder||''});grid.querySelector('input[aria-label="Versione CV"]').value=applicationState(row).cv_version;grid.querySelector('input[aria-label="Hash CV (SHA256)"]').value=applicationState(row).cv_sha256;}));
   const notes=node('label','Note personali','application-notes'),area=node('textarea');area.value=state.note||'';area.maxLength=8000;area.rows=4;area.setAttribute('aria-label','Note personali');area.oninput=()=>setApplicationRow(row,{note:area.value});notes.append(area);s.append(notes);
 }
-function tracked(row){const state=applicationState(row);return !!(state.checked||applicationStages.includes(state.stage)||['interested','drafted'].includes(state.stage)||state.matched_cv_id);}
+function tracked(row){const state=applicationState(row);return !!(state.favorite===true||state.checked||applicationStages.includes(state.stage)||['interested','drafted'].includes(state.stage)||state.matched_cv_id);}
 function todayISO(){const now=new Date();return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;}
 function isFollowUpDue(row){const state=applicationState(row);return CareerActions.quietSummary(state).needs_followup||!!(state.follow_up&&state.follow_up<=todayISO()&&['applied','interview'].includes(applicationStage(row)));}
 function renderTrackerSummary(visible){
@@ -711,6 +744,7 @@ function showDetail(row){
   if(row.company_website)actions.append(safeLink(row.company_website,'Sito aziendale'));
   else if(row.kind==='job')actions.append(node('span','Sito aziendale da verificare','muted'));
   root.append(actions);
+  if(row.kind==='job')root.prepend(rowLead(row,()=>{render();showDetail(row);}));
   baseCVChoice(root,row);
   for(const item of CareerActions.gateNotes(row)){const s=section(root,item.label+' · '+item.verdict);s.append(node('p',item.reason||''),node('blockquote',item.quote));}
   CareerActions.renderDocuments(root,row);
