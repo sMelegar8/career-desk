@@ -65,6 +65,9 @@ const CareerActions=(()=>{
     const quiet=quietSummary(applicationState(row)),stage=applicationStage(row);
     if(stage==='interview')s.append(node('p','Colloquio registrato: puoi richiedere la preparazione con esempi documentati.','notice'));
     run('Richiedi lettera di presentazione','cover_letter',row.complete&&gates(row).verdict!=='FAIL');
+    // A greyed-out button alone read as "missing" (7 Nov 2026): say why the letter cannot be requested.
+    if(!row.complete)s.append(node('p','Lettera non disponibile: manca il testo completo dell’annuncio.','muted'));
+    else if(gates(row).verdict==='FAIL')s.append(node('p','Lettera non disponibile: un requisito obbligatorio dell’annuncio risulta non soddisfatto.','muted'));
     run('Richiedi preparazione colloquio','interview_prep',row.complete);
     // Tailored CV only for favourites (candidate decision 6 Nov 2026); it stays a draft until approved.
     if(applicationState(row).favorite===true){
