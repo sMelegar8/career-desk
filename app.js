@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const enc = new TextEncoder(), dec = new TextDecoder();
 const AAD = enc.encode('career-desk-v1');
 const model = {data:null,key:null,config:null,checks:{version:2,rows:{}},view:'saved',page:0,local:false,csrf:'',token:'',save:Promise.resolve(),agentRows:[],session:0,newsletter:{draft:null,revision:'',loaded:false,dirty:false}};
-const labels = {notifications:'Notifiche candidature',connections:'Connessioni e configurazione',integrations:'Integrazioni',intelligence:'Job Intelligence','parma-research':'Parma · opportunità ottobre 2026',saved:'Salvati LinkedIn',agent:'Salvati da AI Job Agent',tracker:'Tracker candidature',sheet:'Foglio candidature',newsletter:'Newsletter / Brief',jobs:'Tutti gli annunci',companies:'Aziende e recruiter',documents:'Libreria CV',reviews:'Revisioni ATS','linkedin-profile':'Profilo LinkedIn','linkedin-cv':'LinkedIn: da integrare o correggere','portfolio-review':'Revisione portfolio',impact:'Impatto CV'};
+const labels = {notifications:'Notifiche candidature',connections:'Connessioni e configurazione',integrations:'Integrazioni',intelligence:'Job Intelligence','parma-research':'Parma · opportunità ottobre 2026',saved:'Salvati LinkedIn e Indeed',agent:'Salvati da AI Job Agent',tracker:'Tracker candidature',sheet:'Foglio candidature',newsletter:'Newsletter / Brief',jobs:'Tutti gli annunci',companies:'Aziende e recruiter',documents:'Libreria CV',reviews:'Revisioni ATS','linkedin-profile':'Profilo LinkedIn','linkedin-cv':'LinkedIn: da integrare o correggere','portfolio-review':'Revisione portfolio',impact:'Impatto CV'};
 const stages = {planned:'Da valutare',interested:'Mi interessa',drafted:'Bozza non inviata',applied:'Inviata',interview:'Colloquio',offer:'Offerta',hired:'Assunto',rejected:'Esito negativo',withdrawn:'Ritirata',no_response:'Chiusa: nessuna risposta',offer_declined:'Offerta rifiutata'};
 const applicationStages = ['applied','interview','offer','hired','rejected','withdrawn','no_response','offer_declined'];
 const newsletterAreas = ['R&D','Project Management','Software Development','Chimica e laboratorio','Data Analysis e Data Engineering','AI e LLM','Qualita e Compliance','Altre opportunita'];
@@ -470,7 +470,16 @@ function render(){
     if(row.kind==='job'){
       CareerActions.badges(main,row);
       if(isApplied(row)){const base=baseCVInfo(row);main.append(node('div',base.label+(base.override?' · Scelta manuale':''),'subline'));}
-      main.append(node('div',row.saved?'Salvato LinkedIn':'Ricerca archiviata','subline'));
+      if(row.saved){
+        const platform=row.saved_platform||(/indeed/i.test(row.source||'')?'Indeed':'LinkedIn');
+        main.append(node('span',platform,'badge'));
+        if(row.also_saved_on?.includes('Indeed'))main.append(node('span','anche su Indeed','badge'));
+      }else main.append(node('div','Ricerca archiviata','subline'));
+      if(row.platform_save){
+        const save=row.platform_save,platform=String(save.platform||'').toLowerCase()==='indeed'?'Indeed':'LinkedIn';
+        const labels={pending:'In attesa del PC',saved:'Salvato su '+platform,already_saved:'Gi\u00e0 salvato su '+platform,no_match:'Non trovato su LinkedIn n\u00e9 Indeed',ambiguous:'Pi\u00f9 offerte simili: salva tu',closed:'Offerta chiusa: non salvabile',blocked:'Indeed blocca il salvataggio automatico',login_required:'Accesso richiesto su '+platform,challenge:'Verifica richiesta dalla piattaforma',failed:'Salvataggio da verificare'};
+        if(labels[save.status])main.append(node('div',labels[save.status],'subline'));
+      }
       const observed=row.first_seen_at||row.captured_at;
       if(row.saved&&observed)main.append(node('div','Rilevato il '+new Date(observed).toLocaleDateString('it-IT'),'subline'));
     }
@@ -756,7 +765,7 @@ function showDetail(row){
   if(row.kind==='job'){
     const observed=row.first_seen_at||row.captured_at;
     const date=observed?new Date(observed).toLocaleString('it-IT',{dateStyle:'long',timeStyle:'short'}):'non disponibile';
-    const note=row.saved?'Prima rilevazione nei tuoi annunci salvati: '+date+'. LinkedIn non fornisce la data originale del salvataggio.':'Annuncio acquisito il '+date+'.';
+    const note=row.saved?'Prima rilevazione nei tuoi annunci salvati: '+date+'. La data originale del salvataggio non ? disponibile.':'Annuncio acquisito il '+date+'.';
     root.append(node('p',note+' Apertura attuale non verificata.','notice'));
   }
   else if(row.note)root.append(node('p',row.note,'notice'));

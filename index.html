@@ -19,7 +19,7 @@
   <script src="application_mail.js?v=5bed6e48f3bd9ca7" defer></script>
   <script src="career_actions.js?v=ba21002d7bdd7fb2" defer></script>
   <script src="application_sheet.js?v=a0f55c3eac4d6161" defer></script>
-  <script src="app.js?v=14eae1707f353b0d" defer></script>
+  <script src="app.js?v=a451aaa78638765e" defer></script>
 </head>
 <body>
   <section id="login" class="access">
@@ -37,7 +37,7 @@
     <div class="app-layout">
       <aside id="career-navigation" class="navigation"><nav aria-label="Viste">
         <section class="nav-group" aria-label="Opportunità"><h2>Opportunità</h2>
-        <button data-view="saved" class="active"><i data-lucide="bookmark"></i> Salvati LinkedIn <span id="count-saved"></span></button>
+        <button data-view="saved" class="active"><i data-lucide="bookmark"></i> Salvati LinkedIn e Indeed <span id="count-saved"></span></button>
         <button data-view="agent"><i data-lucide="sparkles"></i> Salvati da AI Job Agent <span id="count-agent">0</span></button>
         <button data-view="jobs"><i data-lucide="briefcase-business"></i> Tutti gli annunci <span id="count-jobs"></span></button>
         <button data-view="companies"><i data-lucide="building-2"></i> Aziende e recruiter <span id="count-companies"></span></button>
@@ -60,7 +60,7 @@
         <button data-view="portfolio-review"><i data-lucide="briefcase"></i> Revisione portfolio</button>
         </section>
       </nav><div class="agent-state"><span class="dot"></span><strong id="agent-mode">Agenti sul PC</strong><span id="agent-count"></span><p id="budget-info" class="muted"></p><button id="linkedin-login" class="secondary" hidden><i data-lucide="log-in"></i> Ricollega LinkedIn</button><button id="run-all" class="secondary" hidden><i data-lucide="play"></i> Avvia revisioni</button><button id="publish" class="secondary" hidden><i data-lucide="cloud-upload"></i> Aggiorna web app</button></div></aside>
-      <main><p id="sync-alert" class="sync-alert" role="alert" hidden></p><div class="page-heading"><div><h1 id="view-title">Salvati LinkedIn</h1><p id="view-subtitle"></p></div><span id="updated" class="muted"></span></div>
+      <main><p id="sync-alert" class="sync-alert" role="alert" hidden></p><div class="page-heading"><div><h1 id="view-title">Salvati LinkedIn e Indeed</h1><p id="view-subtitle"></p></div><span id="updated" class="muted"></span></div>
         <div class="metrics"><div><span id="metric-total">0</span><span>annunci completi</span></div><div><span id="metric-cvs">0</span><span>CV verificati</span></div><div><span id="metric-sent">0</span><span>candidature inviate</span></div><div><span id="metric-review">0</span><span>revisioni analizzate</span></div></div>
         <label class="search search-row"><i data-lucide="search"></i><input id="search" type="search" placeholder="Cerca azienda, ruolo, competenza" aria-label="Cerca"></label><details class="filter-drawer"><summary>Ricerca e filtri</summary><div class="toolbar"><select id="area" aria-label="Area"><option value="">Tutte le aree</option></select><select id="distance" aria-label="Distanza da Parma"><option value="">Qualsiasi distanza</option><option value="30">Entro 30 km</option><option value="100">Entro 100 km</option><option value="200">Entro 200 km</option><option value="300">Entro 300 km</option><option value="unknown">Distanza da verificare</option></select><select id="status" aria-label="Stato"><option value="">Tutti gli stati</option><option value="favorite">Preferiti ★</option><option value="unsent">Non inviati</option><option value="sent">Inviati</option><option value="ready">CV pronto</option><option value="complete">Annuncio completo</option><option value="incomplete">Testo da integrare</option></select><select id="tracker-stage" aria-label="Fase nel tracker" hidden><option value="">Tutte le candidature</option><option value="sent">Già inviate</option></select>
           <label class="score-filter" for="fit-min">Min. /100<input id="fit-min" type="number" min="0" max="100" step="1" placeholder="0" aria-label="Allineamento minimo"></label>
