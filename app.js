@@ -4,6 +4,7 @@ const enc = new TextEncoder(), dec = new TextDecoder();
 const AAD = enc.encode('career-desk-v1');
 const model = {data:null,key:null,config:null,checks:{version:2,rows:{}},view:'saved',page:0,local:false,csrf:'',token:'',save:Promise.resolve(),agentRows:[],session:0,newsletter:{draft:null,revision:'',loaded:false,dirty:false}};
 const labels = {notifications:'Notifiche candidature',connections:'Connessioni e configurazione',integrations:'Integrazioni',intelligence:'Job Intelligence','parma-research':'Parma · opportunità ottobre 2026',saved:'Salvati LinkedIn e Indeed',agent:'Salvati da AI Job Agent',tracker:'Tracker candidature',sheet:'Foglio candidature',newsletter:'Newsletter / Brief',jobs:'Tutti gli annunci',companies:'Aziende e recruiter',documents:'Libreria CV',reviews:'Revisioni ATS','linkedin-profile':'Profilo LinkedIn','linkedin-cv':'LinkedIn: da integrare o correggere','portfolio-review':'Revisione portfolio',impact:'Impatto CV'};
+labels['favorite-companies']='Aziende preferite';
 const stages = {planned:'Da valutare',interested:'Mi interessa',drafted:'Bozza non inviata',applied:'Inviata',interview:'Colloquio',offer:'Offerta',hired:'Assunto',rejected:'Esito negativo',withdrawn:'Ritirata',no_response:'Chiusa: nessuna risposta',offer_declined:'Offerta rifiutata'};
 const applicationStages = ['applied','interview','offer','hired','rejected','withdrawn','no_response','offer_declined'];
 const newsletterAreas = ['R&D','Project Management','Software Development','Chimica e laboratorio','Data Analysis e Data Engineering','AI e LLM','Qualita e Compliance','Altre opportunita'];
@@ -283,6 +284,55 @@ function renderLinkedInCv(){
   list('Da non mettere su LinkedIn',data.do_not_add);list('Domande aperte',data.questions);
   update();icons();
 }
+const favoriteCompanyFilters={onlyNew:false,verdict:''};
+const favoriteVerdicts={consigliata:'Consigliata',da_valutare:'Da valutare',sconsigliata:'Sconsigliata'};
+function favoriteScore(posting){const score=posting.score;return posting.score_status!=='pending'&&score&&Number.isInteger(score.score)&&score.score>=0&&score.score<=100&&favoriteVerdicts[score.verdict]?score:null;}
+function favoriteCompaniesNew(){return (model.data?.favorite_companies?.companies||[]).reduce((total,company)=>total+(company.postings||[]).filter(p=>p.active!==false&&p.is_new).length,0);}
+function renderFavoriteCompanies(){
+  const root=$('favorite-companies-panel'),data=model.data.favorite_companies;root.replaceChildren();
+  if(!data){root.append(node('p','Nessuna scansione delle aziende preferite disponibile.','linkedin-empty'));return;}
+  const date=(value,time=false)=>{const d=new Date(value);return value&&!isNaN(d)?(time?d.toLocaleString('it-IT',{dateStyle:'short',timeStyle:'short'}):d.toLocaleDateString('it-IT')):'non disponibile';};
+  const cvLabel=key=>{const cv=(data.cv_options||[]).find(c=>String(c.key)===String(key));return cv?[cv.code,cv.label,cv.manual?'(scelta manuale)':''].filter(Boolean).join(' · '):key?'CV '+key:'In attesa di suggerimento';};
+  const head=node('div',undefined,'linkedin-section');
+  head.append(node('p','Posizioni nell’area di Parma dai siti ufficiali. Aggiornamento automatico ogni 3 giorni.'),node('p',`Ultimo aggiornamento: ${date(data.last_scan_at,true)} · Prossimo aggiornamento: ${date(data.next_scan_due_at,true)}`,'muted'));
+  const filters=node('div',undefined,'favorite-company-filters'),label=node('label'),onlyNew=node('input');onlyNew.type='checkbox';onlyNew.id='favorite-company-new';onlyNew.checked=favoriteCompanyFilters.onlyNew;label.append(onlyNew,document.createTextNode('Solo nuove'));
+  const verdictLabel=node('label','Esito '),verdict=node('select');verdict.id='favorite-company-verdict';
+  for(const [value,text]of [['','Tutti gli esiti'],...Object.entries(favoriteVerdicts),['pending','In attesa di analisi']]){const option=node('option',text);option.value=value;verdict.append(option);}verdict.value=favoriteCompanyFilters.verdict;verdictLabel.append(verdict);filters.append(label,verdictLabel);head.append(filters);root.append(head);
+  const body=node('div');root.append(body);
+  const draw=()=>{
+    body.replaceChildren();let visibleCount=0;
+    for(const company of data.companies||[]){
+      const section=node('section',undefined,'linkedin-section favorite-company'),postings=(company.postings||[]).filter(p=>p.active!==false);
+      section.append(node('h2',company.name));
+      let status=`${postings.length} ${postings.length===1?'posizione':'posizioni'} a Parma · aggiornato ${date(company.last_success_at)}`;
+      if(company.status==='stale')status=`Dati del ${date(company.last_success_at)} (ultimo aggiornamento non riuscito)${company.message?': '+company.message:''}`;
+      else if(company.status!=='ok')status=`${company.status==='source_not_found'?'Elenco ufficiale non disponibile':'Sito non leggibile'}${company.message?': '+company.message:''}`;
+      section.append(node('p',status,company.status==='ok'?'muted':'notice'));
+      const visible=postings.filter(p=>(!favoriteCompanyFilters.onlyNew||p.is_new)&&(!favoriteCompanyFilters.verdict||(favoriteScore(p)?.verdict||'pending')===favoriteCompanyFilters.verdict)).sort((a,b)=>(favoriteScore(b)?.score??-1)-(favoriteScore(a)?.score??-1)||String(a.title).localeCompare(String(b.title),'it'));
+      visibleCount+=visible.length;
+      for(const posting of visible){
+        const card=node('article',undefined,'linkedin-item favorite-company-posting'),heading=node('div',undefined,'linkedin-item-heading'),title=node('h3'),link=safeLink(posting.url,posting.title),badges=node('div',undefined,'linkedin-cv-badges'),score=favoriteScore(posting);
+        link.className='favorite-company-title';title.append(link);heading.append(title,badges);card.append(heading);
+        if(posting.is_new)badges.append(node('span','Nuova','badge ready'));
+        badges.append(node('span',score?`${score.score}/100 · ${favoriteVerdicts[score.verdict]}`:'Analisi in attesa','badge '+(score?.verdict==='consigliata'?'ready':score?.verdict==='da_valutare'?'warn':'')));
+        card.append(node('p',posting.location,'favorite-company-location'));
+        if(posting.posted_at)card.append(node('p','Pubblicata il '+date(posting.posted_at),'muted'));
+        if(score){
+          if(score.summary_it)card.append(node('p',score.summary_it));
+          card.append(node('p','CV consigliato: '+cvLabel(score.cv_key),'favorite-company-cv'));
+          if(score.alt_cv_key)card.append(node('p','Alternativa: '+cvLabel(score.alt_cv_key)));
+          if(score.why?.length){const why=node('ul');for(const text of score.why)why.append(node('li',text));card.append(why);}
+          const gaps=node('details',undefined,'favorite-company-gaps');gaps.append(node('summary',`Gap e requisiti non documentati (${(score.gaps||[]).length})`));
+          if(score.gaps?.length){const list=node('ul');for(const text of score.gaps)list.append(node('li',text));gaps.append(list);}else gaps.append(node('p','Nessun gap segnalato nell’analisi.'));card.append(gaps);
+        }else card.append(node('p','CV suggerito (provvisorio): '+cvLabel(posting.provisional_cv_key),'favorite-company-cv'),node('p','Punteggio, motivazioni e gap saranno disponibili dopo l’analisi.','muted'));
+        card.append(node('p','Verificata sul sito il '+date(posting.last_verified_at||posting.last_seen_at,true),'muted'));section.append(card);
+      }
+      if(!visible.length)section.append(node('p',postings.length?'Nessuna posizione corrisponde ai filtri.':company.status==='ok'?'Nessuna posizione aperta nell’area di Parma.':'Nessuna posizione verificata disponibile.','muted'));body.append(section);
+    }
+    const summary=node('p',`${visibleCount} posizioni mostrate`,'favorite-company-count');summary.setAttribute('role','status');body.prepend(summary);
+  };
+  onlyNew.onchange=()=>{favoriteCompanyFilters.onlyNew=onlyNew.checked;draw();};verdict.onchange=()=>{favoriteCompanyFilters.verdict=verdict.value;draw();};draw();
+}
 function renderParmaResearch(){
   const root=$('parma-research-panel'),research=model.data.parma_research;root.replaceChildren();
   if(!research){root.append(node('p','Ricerca Parma non disponibile in questo snapshot.'));return;}
@@ -374,6 +424,7 @@ function renderMetrics(){
   const d=model.data,a=d.audit;
   $('count-saved').textContent=a.saved_jobs;$('count-jobs').textContent=a.all_jobs;$('count-companies').textContent=a.companies;$('count-documents').textContent=(model.data.base_cvs||[]).length;
   $('count-agent').textContent=model.agentRows.length;
+  $('count-favorite-companies').textContent=favoriteCompaniesNew()||'';
   const applications=applicationRows();$('count-tracker').textContent=applications.filter(r=>tracked(r)).length;
   const reviewed=[...d.jobs,...d.companies].filter(j=>j.review).length;$('count-reviews').textContent=reviewed;$('count-linkedin-cv').textContent=linkedinCvOpen()||'';
   $('metric-total').textContent=a.complete_jobs;$('metric-cvs').textContent=d.documents.filter(x=>x.ready).length;
@@ -425,12 +476,13 @@ function render(){
   CareerApplicationMail.apply(model.data.application_mail);renderExplorerFilters();
   renderMetrics();$('view-title').textContent=labels[model.view];
   $('agent-panel').hidden=model.view!=='agent';
+  const favoriteCompanies=model.view==='favorite-companies';$('favorite-companies-panel').hidden=!favoriteCompanies;
   const extra=['connections','integrations','intelligence','notifications'].includes(model.view);$('notifications-panel').hidden=model.view!=='notifications';$('connections-panel').hidden=model.view!=='connections';$('integrations-panel').hidden=model.view!=='integrations';$('intelligence-panel').hidden=model.view!=='intelligence';
   // Since 4 Nov 2026 the tracker is the colour-coded sheet; the old 'sheet' view is an alias.
   const sheet=model.view==='sheet'||model.view==='tracker';$('sheet-panel').hidden=!sheet;
   const parma=model.view==='parma-research'||sheet,impact=model.view==='impact',newsletter=model.view==='newsletter',tracker=false,linkedin=model.view==='linkedin-profile'||model.view==='linkedin-cv',linkedinCv=model.view==='linkedin-cv',portfolioReview=model.view==='portfolio-review';$('parma-research-panel').hidden=!parma||sheet;$('impact-panel').hidden=!impact;$('newsletter-panel').hidden=!newsletter;$('linkedin-profile-panel').hidden=!linkedin||linkedinCv;$('linkedin-cv-panel').hidden=!linkedinCv;$('portfolio-review-panel').hidden=!portfolioReview;
-  for(const selector of ['.metrics','.toolbar','.search','.filter-drawer','.table-wrap','.pagination','#results-status','#empty'])document.querySelector(selector).hidden=parma||impact||newsletter||linkedin||portfolioReview||extra;
-  document.querySelector('.metrics').hidden=parma||impact||newsletter||linkedin||portfolioReview||extra||tracker;
+  for(const selector of ['.metrics','.toolbar','.search','.filter-drawer','.table-wrap','.pagination','#results-status','#empty'])document.querySelector(selector).hidden=parma||impact||newsletter||linkedin||portfolioReview||extra||favoriteCompanies;
+  document.querySelector('.metrics').hidden=parma||impact||newsletter||linkedin||portfolioReview||extra||favoriteCompanies||tracker;
   $('status').hidden=tracker;$('tracker-stage').hidden=!tracker;
   document.querySelector('table').classList.toggle('tracker-table',tracker);
   const headings=document.querySelectorAll('thead th');headings[2].textContent=tracker?'Stato': 'Sede';headings[3].textContent=tracker?'Invio / Follow-up':'Documenti';headings[4].textContent=tracker?'Canale / CV / Esito':'Revisione';
@@ -449,6 +501,7 @@ function render(){
   if(parma){renderParmaResearch();return;}
   if(impact){renderImpact();return;}
   if(newsletter){renderNewsletter();return;}
+  if(favoriteCompanies){$('view-subtitle').textContent='Fonti ufficiali · area di Parma · affinità con i CV base approvati';renderFavoriteCompanies();return;}
   if(linkedinCv){renderLinkedInCv();return;}
   if(linkedin){renderLinkedInProfile();return;}
   if(portfolioReview){renderLinkedInProfile('portfolio');return;}
@@ -850,7 +903,7 @@ $('settings').onclick=()=>{$('sync-dialog').showModal();};
 $('sync-now').onclick=async()=>{model.token=$('github-token').value.trim();$('github-token').value='';try{await githubSync();$('sync-message').textContent='Candidature, CV associati e lettere sincronizzati.';}catch(e){$('sync-message').textContent=e.message;}};
 $('export-state').onclick=async()=>saveBlob(JSON.stringify(await encrypt(model.checks)),'Career_Desk_Candidature.enc','application/json');
 $('import-state').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;const incoming=JSON.parse(dec.decode(await decrypt(JSON.parse(await file.text()))));model.checks=merge(model.checks,incoming);await persist();render();toast('Spunte importate');}catch{toast('File non valido o cifrato con un’altra password');}e.target.value='';};
-$('lock').onclick=async()=>{CareerApplicationMail.lock();CareerCloud.lock();for(const input of document.querySelectorAll('#connections-panel input'))input.value='';$('connections-panel').replaceChildren();clearTimeout(saveTimer);await persist(false);await model.save;applicationCache=null;documentCache=null;model.session++;AgentSaved.lock();model.agentRows=[];$('agent-token').value='';$('agent-message').textContent='';$('count-agent').textContent='0';model.data=null;model.details=null;model.detailsPromise=null;model.key=null;model.token='';model.checks={version:2,rows:{}};model.newsletter={draft:null,revision:'',loaded:false,dirty:false};$('newsletter-form').reset();$('newsletter-sections').replaceChildren();$('newsletter-preview-frame').removeAttribute('srcdoc');$('newsletter-preview-frame').hidden=true;$('workspace').hidden=true;$('rows').replaceChildren();$('detail-content').replaceChildren();$('linkedin-profile-panel').replaceChildren();$('linkedin-cv-panel').replaceChildren();$('parma-research-panel').replaceChildren();$('integrations-panel').replaceChildren();$('intelligence-panel').replaceChildren();$('connections-panel').replaceChildren();connectionsData=null;connectionsDirty=false;document.querySelectorAll('dialog').forEach(d=>d.close());$('login').hidden=false;};
+$('lock').onclick=async()=>{CareerApplicationMail.lock();CareerCloud.lock();for(const input of document.querySelectorAll('#connections-panel input'))input.value='';$('connections-panel').replaceChildren();clearTimeout(saveTimer);await persist(false);await model.save;applicationCache=null;documentCache=null;model.session++;AgentSaved.lock();model.agentRows=[];$('agent-token').value='';$('agent-message').textContent='';$('count-agent').textContent='0';model.data=null;model.details=null;model.detailsPromise=null;model.key=null;model.token='';model.checks={version:2,rows:{}};model.newsletter={draft:null,revision:'',loaded:false,dirty:false};$('newsletter-form').reset();$('newsletter-sections').replaceChildren();$('newsletter-preview-frame').removeAttribute('srcdoc');$('newsletter-preview-frame').hidden=true;$('workspace').hidden=true;$('rows').replaceChildren();$('detail-content').replaceChildren();$('linkedin-profile-panel').replaceChildren();$('linkedin-cv-panel').replaceChildren();$('favorite-companies-panel').replaceChildren();$('parma-research-panel').replaceChildren();$('integrations-panel').replaceChildren();$('intelligence-panel').replaceChildren();$('connections-panel').replaceChildren();connectionsData=null;connectionsDirty=false;document.querySelectorAll('dialog').forEach(d=>d.close());$('login').hidden=false;};
 $('refresh').onclick=async()=>{if(model.view==='notifications'&&canConfigure()){await CareerApplicationMail.refresh();return;}if(model.view==='connections'&&canConfigure()){await loadConnections(true);return;}if(model.view==='integrations'&&!model.local&&CareerCloud.connected){try{await refreshIntegrationData();toast('Configurazione aggiornata');}catch(e){toast(e.message);}return;}if(model.view==='newsletter'&&canConfigure()){await loadNewsletterConfig();return;}if(model.view==='agent'){await loadAgentCollection();return;}try{if(model.local){model.data=await readCatalog();model.checks=merge(model.data.state,model.checks);}else{model.config=await fetchJSON('config.json');model.data=await readCatalog();const shared=JSON.parse(dec.decode(await decrypt(await fetchJSON('state.enc'))));model.checks=merge(model.data.state,shared,model.checks);model.newsletter={draft:null,revision:'',loaded:false,dirty:false};$('newsletter-sections').replaceChildren();if(CareerCloud.connected)connectionsData=await CareerCloud.load();}render();toast('Dashboard aggiornata');}catch(e){toast(e.message);}};
 $('run-all').onclick=()=>runReviews();$('publish').onclick=async()=>{try{toast('Pubblicazione in corso…');const result=await localAPI('publish',{});toast(result.message);}catch(e){toast(e.message);}};
 $('linkedin-login').onclick=async()=>{try{const result=await localAPI('linkedin-login',{});toast(result.message);}catch(e){toast(e.message);}};

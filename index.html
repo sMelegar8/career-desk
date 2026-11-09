@@ -9,7 +9,7 @@
   <title>Career Desk</title>
   <link rel="icon" href="icon.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="style.css?v=c04aa10cf021ee0a">
+  <link rel="stylesheet" href="style.css?v=8c83c2397b4449a4">
   <script src="lucide.min.js?v=3411692820cb8d47" defer></script>
   <script src="agent_saved.js?v=af28be443c2c794f" defer></script>
   <script src="matching.js?v=06041d3de6fe5541" defer></script>
@@ -19,7 +19,7 @@
   <script src="application_mail.js?v=5bed6e48f3bd9ca7" defer></script>
   <script src="career_actions.js?v=ba21002d7bdd7fb2" defer></script>
   <script src="application_sheet.js?v=a0f55c3eac4d6161" defer></script>
-  <script src="app.js?v=a451aaa78638765e" defer></script>
+  <script src="app.js?v=fcd74ee44cac4fe8" defer></script>
 </head>
 <body>
   <section id="login" class="access">
@@ -41,6 +41,7 @@
         <button data-view="agent"><i data-lucide="sparkles"></i> Salvati da AI Job Agent <span id="count-agent">0</span></button>
         <button data-view="jobs"><i data-lucide="briefcase-business"></i> Tutti gli annunci <span id="count-jobs"></span></button>
         <button data-view="companies"><i data-lucide="building-2"></i> Aziende e recruiter <span id="count-companies"></span></button>
+        <button data-view="favorite-companies"><i data-lucide="building-2"></i> Aziende preferite <span id="count-favorite-companies"></span></button>
         <button data-view="parma-research"><i data-lucide="map-pin"></i> Parma · ottobre 2026</button>
         <button data-view="connections"><i data-lucide="settings"></i> Connessioni e configurazione</button>
         <button data-view="integrations"><i data-lucide="plug"></i> Integrazioni</button>
@@ -81,6 +82,7 @@
         <section id="impact-panel" hidden><p id="impact-progress" class="impact-progress" aria-live="polite"></p><div id="impact-questions"></div></section>
         <section id="linkedin-profile-panel" hidden aria-label="Revisione del profilo LinkedIn"></section>
         <section id="linkedin-cv-panel" hidden aria-label="LinkedIn: da integrare o correggere"></section>
+        <section id="favorite-companies-panel" hidden aria-label="Aziende preferite: posizioni a Parma"></section>
         <section id="portfolio-review-panel" hidden aria-label="Revisione del portfolio"></section>
         <section id="newsletter-panel" hidden aria-label="Editor Newsletter e Brief">
           <p id="newsletter-mode" class="notice"></p>
