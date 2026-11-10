@@ -312,6 +312,8 @@ function renderFavoriteCompanies(){
       visibleCount+=visible.length;
       for(const posting of visible){
         const card=node('article',undefined,'linkedin-item favorite-company-posting'),heading=node('div',undefined,'linkedin-item-heading'),title=node('h3'),link=safeLink(posting.url,posting.title),badges=node('div',undefined,'linkedin-cv-badges'),score=favoriteScore(posting);
+        const row=posting.job_id?{...posting,id:'job:'+posting.job_id,kind:'job',job_id:posting.job_id,link:posting.url,complete:true,career_documents:posting.career_documents||{artifacts:[]}}:null;
+        if(row)heading.append(favoriteButton(row,draw));
         link.className='favorite-company-title';title.append(link);heading.append(title,badges);card.append(heading);
         if(posting.is_new)badges.append(node('span','Nuova','badge ready'));
         badges.append(node('span',score?`${score.score}/100 · ${favoriteVerdicts[score.verdict]}`:'Analisi in attesa','badge '+(score?.verdict==='consigliata'?'ready':score?.verdict==='da_valutare'?'warn':'')));
@@ -325,11 +327,14 @@ function renderFavoriteCompanies(){
           const gaps=node('details',undefined,'favorite-company-gaps');gaps.append(node('summary',`Gap e requisiti non documentati (${(score.gaps||[]).length})`));
           if(score.gaps?.length){const list=node('ul');for(const text of score.gaps)list.append(node('li',text));gaps.append(list);}else gaps.append(node('p','Nessun gap segnalato nell’analisi.'));card.append(gaps);
         }else card.append(node('p','CV suggerito (provvisorio): '+cvLabel(posting.provisional_cv_key),'favorite-company-cv'),node('p','Punteggio, motivazioni e gap saranno disponibili dopo l’analisi.','muted'));
-        card.append(node('p','Verificata sul sito il '+date(posting.last_verified_at||posting.last_seen_at,true),'muted'));section.append(card);
+        card.append(node('p','Verificata sul sito il '+date(posting.last_verified_at||posting.last_seen_at,true),'muted'));
+        if(row)CareerActions.renderDocuments(card,row,{tailoredOnly:true});
+        section.append(card);
       }
       if(!visible.length)section.append(node('p',postings.length?'Nessuna posizione corrisponde ai filtri.':company.status==='ok'?'Nessuna posizione aperta nell’area di Parma.':'Nessuna posizione verificata disponibile.','muted'));body.append(section);
     }
     const summary=node('p',`${visibleCount} posizioni mostrate`,'favorite-company-count');summary.setAttribute('role','status');body.prepend(summary);
+    icons();
   };
   onlyNew.onchange=()=>{favoriteCompanyFilters.onlyNew=onlyNew.checked;draw();};verdict.onchange=()=>{favoriteCompanyFilters.verdict=verdict.value;draw();};draw();
 }

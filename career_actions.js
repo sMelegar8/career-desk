@@ -57,31 +57,34 @@ const CareerActions=(()=>{
     if(!response.ok)throw new Error('Documento modificato o non disponibile: aggiorna il catalogo.');
     return response.arrayBuffer();
   }
-  function renderDocuments(parent,row){
+  function renderDocuments(parent,row,options={}){
     if(row.kind!=='job'||!row.job_id)return;
     const s=section(parent,'Documenti e azioni su richiesta'),available=model.local||CareerCloud.connected;
     if(!available)s.append(node('p','Collega GitHub in Connessioni per inviare richieste dal telefono.','muted'));
     const run=(text,kind,enabled=true)=>{const b=button(text,'file-pen-line',async()=>{b.disabled=true;try{await request(row,kind);}catch(error){toast(error.message);}finally{b.disabled=!available||!enabled;}});b.disabled=!available||!enabled;s.append(b);};
     const quiet=quietSummary(applicationState(row)),stage=applicationStage(row);
-    if(stage==='interview')s.append(node('p','Colloquio registrato: puoi richiedere la preparazione con esempi documentati.','notice'));
-    run('Richiedi lettera di presentazione','cover_letter',row.complete&&gates(row).verdict!=='FAIL');
-    // A greyed-out button alone read as "missing" (7 Nov 2026): say why the letter cannot be requested.
-    if(!row.complete)s.append(node('p','Lettera non disponibile: manca il testo completo dell’annuncio.','muted'));
-    else if(gates(row).verdict==='FAIL')s.append(node('p','Lettera non disponibile: un requisito obbligatorio dell’annuncio risulta non soddisfatto.','muted'));
-    run('Richiedi preparazione colloquio','interview_prep',row.complete);
+    if(!options.tailoredOnly){
+      if(stage==='interview')s.append(node('p','Colloquio registrato: puoi richiedere la preparazione con esempi documentati.','notice'));
+      run('Richiedi lettera di presentazione','cover_letter',row.complete&&gates(row).verdict!=='FAIL');
+      // A greyed-out button alone read as "missing" (7 Nov 2026): say why the letter cannot be requested.
+      if(!row.complete)s.append(node('p','Lettera non disponibile: manca il testo completo dell’annuncio.','muted'));
+      else if(gates(row).verdict==='FAIL')s.append(node('p','Lettera non disponibile: un requisito obbligatorio dell’annuncio risulta non soddisfatto.','muted'));
+      run('Richiedi preparazione colloquio','interview_prep',row.complete);
+    }
     // Tailored CV only for favourites (candidate decision 6 Nov 2026); it stays a draft until approved.
     if(applicationState(row).favorite===true){
       const base=typeof suggestedCV==='function'?suggestedCV(row):null;
       run('Adatta CV'+(base?' (da '+base.label+')':''),'tailored_cv',row.complete);
       s.append(node('p','Riordina ed evidenzia solo fatti già documentati nel CV base e nelle tue conferme; le lacune restano elencate. Usa il limite giornaliero dei CV Claude.','muted'));
     }else s.append(node('p','Metti la stellina ★ per poter adattare il CV a questo annuncio.','muted'));
-    if(openStages.includes(stage)){
+    if(!options.tailoredOnly&&openStages.includes(stage)){
       if(quiet.days_quiet!==null)s.append(node('p',`${quiet.days_quiet} giorni senza attività · ${quiet.followups_sent} solleciti registrati`,'muted'));
       run('Richiedi bozza di sollecito','followup_draft',!!applicationState(row).submitted_on);
       run('Segna sollecito inviato','followup_sent');
       run('Chiudi: nessuna risposta','no_response');
     }
     for(const artifact of row.career_documents?.artifacts||[]){
+      if(options.tailoredOnly&&artifact.kind!=='tailored_cv')continue;
       const article=node('article',undefined,'detail-section');article.append(node('h4',artifact.label_it||artifact.status));
       for(const format of ['pdf','docx'])if(artifact.files?.[format])article.append(button(format==='pdf'?'Apri PDF':'Scarica Word','download',async()=>{try{saveBlob(await bytes(row,artifact,format),artifact.files[format].name,'application/octet-stream');}catch(error){toast(error.message);}}));
       if(artifact.text){const text=node('textarea');text.value=artifact.text;text.readOnly=true;text.rows=7;text.setAttribute('aria-label','Sollecito da copiare');article.append(text,button('Copia sollecito','copy',()=>navigator.clipboard.writeText(artifact.text).then(()=>toast('Testo copiato.')).catch(()=>toast('Seleziona il testo e copialo.'))));}
