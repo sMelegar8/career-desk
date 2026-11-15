@@ -23,7 +23,7 @@ const CareerApplicationMail=(()=>{
     if(changed){applicationCache=null;model.data.audit.all_jobs=rows.length;}
     updateCount();return changed;
   }
-  function updateCount(){const count=$('count-notifications');if(count)count.textContent=String((snapshot?.notifications||[]).filter(item=>item.status!=='read').length);}
+  function updateCount(){const unread=(snapshot?.notifications||[]).filter(item=>item.status!=='read').length,count=$('count-notifications');if(count)count.textContent=String(unread);const more=$('count-more');if(more){more.textContent=String(unread);more.hidden=!unread;}}
   function date(value){const parsed=Date.parse(value);return Number.isFinite(parsed)?new Date(parsed).toLocaleString('it-IT'):'Data non disponibile';}
   async function action(body){
     const session=model.session,result=await localAPI('application-mail',body);if(session!==model.session||!model.data)return;
@@ -55,7 +55,7 @@ const CareerApplicationMail=(()=>{
   }
   async function refresh(){
     if(pending||!model.data||document.hidden||!canConfigure())return;pending=true;const session=model.session;
-    try{if(!model.local)await CareerCloud.load();else{const value=await localAPI('application-mail');if(session!==model.session||!model.data)return;apply(value.application_mail||value);}if(session!==model.session||!model.data)return;renderMetrics();if(['tracker','notifications'].includes(model.view)&&!document.querySelector('dialog[open]'))render();}
+    try{if(!model.local)await CareerCloud.load();else{const value=await localAPI('application-mail');if(session!==model.session||!model.data)return;apply(value.application_mail||value);}if(session!==model.session||!model.data)return;renderMetrics();if(['today','tracker','notifications'].includes(model.view)&&!document.querySelector('dialog[open]'))render();}
     catch(error){if(model.view==='notifications'){$('notifications-panel').querySelector('.mail-poll-error')?.remove();$('notifications-panel').append(node('p','Aggiornamento non disponibile: '+error.message,'form-error mail-poll-error'));}}
     finally{pending=false;}
   }
