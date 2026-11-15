@@ -71,6 +71,7 @@ const CareerActions=(()=>{
       else if(gates(row).verdict==='FAIL')s.append(node('p','Lettera non disponibile: un requisito obbligatorio dell’annuncio risulta non soddisfatto.','muted'));
       run('Richiedi preparazione colloquio','interview_prep',row.complete);
       run('Richiedi risposte per il modulo','form_answers',row.complete);
+      run('Richiedi panel di revisori','hiring_panel',row.complete);
     }
     // Tailored CV only for favourites (candidate decision 6 Nov 2026); it stays a draft until approved.
     if(applicationState(row).favorite===true){

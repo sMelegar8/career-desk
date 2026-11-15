@@ -26,6 +26,19 @@ async function fetchJSON(url,opts={}){const r=await fetch(url,{cache:'no-store',
 async function derive(password){const material=await crypto.subtle.importKey('raw',enc.encode(password),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt:unb64(model.config.salt),iterations:model.config.iterations,hash:'SHA-256'},material,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);}
 async function decrypt(value){return crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(value.iv),additionalData:AAD},model.key,unb64(value.data));}
 async function encrypt(value){const iv=crypto.getRandomValues(new Uint8Array(12));const result=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:AAD},model.key,enc.encode(JSON.stringify(value)));return{iv:b64(iv),data:b64(new Uint8Array(result))};}
+function sanitizeContacts(value){
+  if(!Array.isArray(value))return [];
+  const contacts=[];
+  for(const entry of value){
+    if(!entry||typeof entry!=='object')continue;
+    const {name,role,link='',note='',contacted_on=''}=entry;
+    if(typeof name!=='string'||!name.trim()||name.length>80||!['recruiter','hiring_manager','peer','altro'].includes(role)||typeof note!=='string'||note.length>200||typeof link!=='string'||link.length>300||typeof contacted_on!=='string')continue;
+    if(link){try{const url=new URL(link);if(!/^https:\/\//i.test(link)||!url.hostname||/[\s\x00-\x20\x7f\\]/.test(link))continue;}catch{continue;}}
+    if(contacted_on&&(!/^\d{4}-\d{2}-\d{2}$/.test(contacted_on)||!Number.isFinite(Date.parse(contacted_on))||new Date(contacted_on).toISOString().slice(0,10)!==contacted_on||contacted_on.startsWith('0000-')))continue;
+    contacts.push({name:name.trim(),role,link,note,contacted_on});if(contacts.length===10)break;
+  }
+  return contacts;
+}
 function merge(...states){
   const out={version:2,rows:{}};
   for(const state of states)for(const [id,row]of Object.entries(state?.rows||{})){
@@ -33,6 +46,7 @@ function merge(...states){
     const clean={checked:row.checked,updatedAt:row.updatedAt};
     for(const field of ['note','stage','deadline','submitted_on','follow_up','channel','cv_version','cv_sha256','outcome','matched_cv_id','matched_cv_sha256','cover_letter','cover_letter_language','cover_letter_cv_sha256','recruiter','interview_on'])if(Object.hasOwn(row,field))clean[field]=String(row[field]??'').slice(0,field==='cover_letter'?16000:field==='note'?8000:512);
     if(typeof row.favorite==='boolean')clean.favorite=row.favorite;
+    if(Object.hasOwn(row,'contacts'))clean.contacts=sanitizeContacts(row.contacts);
     if(Number.isInteger(row.base_cv_override)&&row.base_cv_override>=1&&row.base_cv_override<=4&&Number.isFinite(Date.parse(row.base_cv_override_at||row.updatedAt))){clean.base_cv_override=row.base_cv_override;clean.base_cv_override_at=row.base_cv_override_at||row.updatedAt;}
     const previous=out.rows[id];
     // Older clients omit new fields; an explicit empty string still clears a field.
@@ -66,7 +80,7 @@ function applicationRows(){
   const known=new Set([...grouped.values()].flatMap(r=>r.state_ids));
   const byState=new Map([...grouped.values()].flatMap(r=>r.state_ids.map(id=>[id,r])));
   for(const id of Object.keys(model.checks.rows)){if(known.has(id))continue;const target=byState.get(CareerApplicationMail.alias(id));if(target){target.state_ids.push(id);known.add(id);}}
-  for(const [id,state]of Object.entries(model.checks.rows))if(!known.has(id)&&!id.startsWith('impact:')&&!id.startsWith('cv:')&&(state.favorite===true||state.checked||applicationStages.includes(state.stage)||['interested','drafted'].includes(state.stage)||state.matched_cv_id))grouped.set('archived:'+id,{id,kind:'archived',name:'Record archiviato',role:id,state_ids:[id],sources:['archived']});
+  for(const [id,state]of Object.entries(model.checks.rows))if(!known.has(id)&&!id.startsWith('impact:')&&!id.startsWith('cv:')&&(state.favorite===true||state.checked||applicationStages.includes(state.stage)||['interested','drafted'].includes(state.stage)||state.matched_cv_id||state.contacts?.length))grouped.set('archived:'+id,{id,kind:'archived',name:'Record archiviato',role:id,state_ids:[id],sources:['archived']});
   const rows=[...grouped.values()],byId=new Map();
   for(const row of rows)for(const id of row.state_ids)byId.set(id,row);
   applicationCache={data:model.data,agents:model.agentRows,checks:model.checks,rows,byId,states:new Map()};
@@ -288,6 +302,7 @@ function renderLinkedInCv(){
 const favoriteCompanyFilters={onlyNew:false,verdict:'',showDiscouraged:false};
 try{const saved=JSON.parse(localStorage.getItem('career-favorite-filters')||'{}');favoriteCompanyFilters.onlyNew=saved.onlyNew===true;favoriteCompanyFilters.showDiscouraged=saved.showDiscouraged===true;}catch{}
 const favoriteVerdicts={consigliata:'Consigliata',da_valutare:'Da valutare',sconsigliata:'Sconsigliata'};
+function scoreOutOfFive(score100){return (score100/20).toFixed(1).replace('.',',');}
 function favoriteScore(posting){const score=posting.score;return posting.score_status!=='pending'&&score&&Number.isInteger(score.score)&&score.score>=0&&score.score<=100&&favoriteVerdicts[score.verdict]?score:null;}
 function appendFavoritePostingHints(parent,posting){
   if(posting.stale_posting&&Number.isInteger(posting.age_days)){const badge=node('span',`Online da ${posting.age_days} giorni`,'badge warn');badge.title='Annuncio pubblicato da più di 60 giorni: verifica che sia ancora aperto prima di candidarti.';parent.append(badge);}
@@ -303,7 +318,7 @@ function renderFavoriteCompanies(){
   const good=p=>['consigliata','da_valutare'].includes(favoriteScore(p)?.verdict);
   const sort=(a,b)=>(favoriteScore(b)?.score??-1)-(favoriteScore(a)?.score??-1)||String(a.title).localeCompare(String(b.title),'it');
   const head=node('div',undefined,'favorite-company-intro');
-  head.append(node('p','Siti ufficiali · Parma · aggiornamento ogni 3 giorni.','muted'),node('p',`Ultimo aggiornamento: ${date(data.last_scan_at,true)} · Prossimo: ${date(data.next_scan_due_at,true)}`,'muted'));
+  head.append(node('p','Siti ufficiali · Parma · aggiornamento ogni 3 giorni.','muted'),node('p',"Il valore su 5 è lo stesso punteggio in un'altra scala: è una stima, non una previsione.",'muted'),node('p',`Ultimo aggiornamento: ${date(data.last_scan_at,true)} · Prossimo: ${date(data.next_scan_due_at,true)}`,'muted'));
   const filters=node('div',undefined,'favorite-company-filters'),label=node('label'),onlyNew=node('input');onlyNew.type='checkbox';onlyNew.id='favorite-company-new';onlyNew.checked=favoriteCompanyFilters.onlyNew;label.append(onlyNew,document.createTextNode('Solo nuove'));
   const discouragedLabel=node('label'),discouraged=node('input');discouraged.type='checkbox';discouraged.id='favorite-company-discouraged';discouraged.checked=favoriteCompanyFilters.showDiscouraged;
   const count=(data.companies||[]).flatMap(c=>c.postings||[]).filter(p=>p.active!==false&&favoriteScore(p)?.verdict==='sconsigliata').length;
@@ -316,7 +331,7 @@ function renderFavoriteCompanies(){
     const watch=(data.companies||[]).flatMap(company=>(company.postings||[]).filter(p=>p.active!==false&&good(p)&&(!favoriteCompanyFilters.onlyNew||p.is_new)).map(p=>({...p,company_name:company.name}))).sort(sort).slice(0,10);
     const strip=node('section',undefined,'favorite-watch');strip.append(node('h2','Da guardare'));
     if(!watch.length)strip.append(node('p','Nessuna posizione da guardare con questi filtri.','muted'));
-    for(const posting of watch){const row=node('div',undefined,'compact-row');row.append(node('span',posting.company_name+' · '+posting.title),node('span',favoriteScore(posting).score+'/100','badge'),safeLink(posting.url,'Apri'));appendFavoritePostingHints(row,posting);strip.append(row);}body.append(strip);
+    for(const posting of watch){const row=node('div',undefined,'compact-row');row.append(node('span',posting.company_name+' · '+posting.title),node('span',`${favoriteScore(posting).score}/100 · ${scoreOutOfFive(favoriteScore(posting).score)}/5`,'badge'),safeLink(posting.url,'Apri'));appendFavoritePostingHints(row,posting);strip.append(row);}body.append(strip);
     for(const company of data.companies||[]){
       const section=node('details',undefined,'linkedin-section favorite-company'),postings=(company.postings||[]).filter(p=>p.active!==false),look=postings.filter(good).length,fresh=postings.filter(p=>p.is_new).length;
       section.open=look>0||fresh>0;const header=node('summary');header.append(node('strong',`${company.name} · ${postings.length} posizioni · ${look} da guardare · ${fresh} nuove`));
@@ -331,7 +346,7 @@ function renderFavoriteCompanies(){
         const row=posting.job_id?{...posting,id:'job:'+posting.job_id,kind:'job',job_id:posting.job_id,link:posting.url,complete:true,career_documents:posting.career_documents||{artifacts:[]}}:null;
         if(row)heading.append(favoriteButton(row,draw));
         link.className='favorite-company-title';title.append(link);heading.append(title,badges);card.append(heading);
-        badges.append(node('span',score?`${score.score}/100 · ${favoriteVerdicts[score.verdict]}`:'Analisi in attesa','badge '+(score?.verdict==='consigliata'?'ready':score?.verdict==='da_valutare'?'warn':'')));
+        badges.append(node('span',score?`${score.score}/100 · ${scoreOutOfFive(score.score)}/5 · ${favoriteVerdicts[score.verdict]}`:'Analisi in attesa','badge '+(score?.verdict==='consigliata'?'ready':score?.verdict==='da_valutare'?'warn':'')));
         if(posting.is_new)badges.append(node('span','Nuova','badge ready'));
         appendFavoritePostingHints(badges,posting);
         card.append(node('p',[posting.location,posting.posted_at?'Pubblicata il '+date(posting.posted_at):'',(score?'CV: ':'CV suggerito (provvisorio): ')+cvLabel(score?.cv_key||posting.provisional_cv_key)].filter(Boolean).join(' · '),'favorite-company-cv'));
@@ -542,7 +557,7 @@ function render(){
     const main=node('td');if(row.kind==='job'||row.kind==='agent')main.append(rowLead(row));main.append(node('div',row.company||row.name,'company'),node('div',row.title||row.role,'role'));
     if(row.kind==='job'||row.fit){
       const score=alignmentScore(row),summary=node('div',undefined,'alignment-summary');
-      const badge=node('span',score===null?'Allineamento n.d.':state.matched_cv_id?`CV selezionato ${score}/100`:`Allineamento ${score}/100`,'badge alignment-score');
+      const badge=node('span',score===null?'Allineamento n.d.':`${state.matched_cv_id?'CV selezionato':'Allineamento'} ${score}/100 · ${scoreOutOfFive(score)}/5`,'badge alignment-score');
       badge.title='Affinità delle competenze documentate con l’annuncio; non probabilità di assunzione.';
       summary.append(badge);
       if(state.matched_cv_id)summary.append(node('span','Confronto del CV associato','subline'));else if(row.fit?.application_tier)summary.append(node('span',fitLabels[row.fit.application_tier]||'Da verificare','subline'));
@@ -574,6 +589,7 @@ function render(){
       if(state.cv_sha256){const hash=node('div','SHA256 '+state.cv_sha256.slice(0,12),'subline');hash.title=state.cv_sha256;info.append(hash);}
       if(state.outcome)info.append(node('div',state.outcome,'tracker-outcome'));
       if(state.note)info.append(node('div','Note presenti','subline'));
+      if(state.contacts?.length)info.append(node('div',state.contacts.length+' contatti','subline'));
       const open=node('td',undefined,'open-cell'),edit=button('','pencil',()=>showDetail(row),'icon');edit.title='Modifica candidatura';edit.setAttribute('aria-label','Modifica candidatura '+(row.company||row.name));open.append(edit);
       tr.append(check,main,place,files,info,open);fragment.append(tr);continue;
     }
@@ -670,8 +686,8 @@ function renderToday(){
   for(const item of todo.sort((a,b)=>a.priority-b.priority||a.at.localeCompare(b.at)).slice(0,6)){const row=node('div',undefined,'compact-row');row.append(node('span',item.text),button('Apri',null,item.open));tasks.append(row);}
   if(!todo.length)tasks.append(node('p','Niente da fare oggi.','muted'));
   const fresh=todayFavoritePostings().filter(p=>p.is_new&&favoriteScore(p)?.verdict!=='sconsigliata').sort((a,b)=>(favoriteScore(b)?.score??-1)-(favoriteScore(a)?.score??-1)).slice(0,5);
-  if(fresh.length){const section=part('Nuove dalle aziende preferite');for(const posting of fresh){const score=favoriteScore(posting),row=node('div',undefined,'compact-row');row.append(node('span',posting.company+' · '+posting.title),node('span',score?score.score+'/100':'Analisi in attesa','badge'),safeLink(posting.url,'Apri'));appendFavoritePostingHints(row,posting);section.append(row);}section.append(button('Vedi tutte',null,()=>goToView('favorite-companies')));}
-  const candidates=todayCandidates();if(candidates.length){const section=part('Migliori da valutare');for(const item of candidates){const row=node('div',undefined,'compact-row');row.append(node('span',item.company+' · '+item.title),node('span',item.score+'/100','badge'),node('span','CV: '+item.cv,'muted'),item.official?safeLink(item.url,'Apri'):button('Apri',null,()=>showDetail(item.row)));if(item.official)appendFavoritePostingHints(row,item.row);section.append(row);}}
+  if(fresh.length){const section=part('Nuove dalle aziende preferite');for(const posting of fresh){const score=favoriteScore(posting),row=node('div',undefined,'compact-row');row.append(node('span',posting.company+' · '+posting.title),node('span',score?`${score.score}/100 · ${scoreOutOfFive(score.score)}/5`:'Analisi in attesa','badge'),safeLink(posting.url,'Apri'));appendFavoritePostingHints(row,posting);section.append(row);}section.append(button('Vedi tutte',null,()=>goToView('favorite-companies')));}
+  const candidates=todayCandidates();if(candidates.length){const section=part('Migliori da valutare');for(const item of candidates){const row=node('div',undefined,'compact-row');row.append(node('span',item.company+' · '+item.title),node('span',`${item.score}/100 · ${scoreOutOfFive(item.score)}/5`,'badge'),node('span','CV: '+item.cv,'muted'),item.official?safeLink(item.url,'Apri'):button('Apri',null,()=>showDetail(item.row)));if(item.official)appendFavoritePostingHints(row,item.row);section.append(row);}}
   const sent=applications.filter(r=>isApplied(r));if(sent.length){const section=part('Le mie candidature'),numbers=node('div',undefined,'today-numbers');for(const [label,count]of [['Inviate',sent.length],['Colloqui',sent.filter(r=>applicationStage(r)==='interview').length],['Offerte',sent.filter(r=>applicationStage(r)==='offer').length],['Esiti negativi',sent.filter(r=>applicationStage(r)==='rejected').length]]){const value=node('div');value.append(node('strong',String(count)),node('span',label));numbers.append(value);}section.append(numbers,button('Apri candidature',null,()=>goToView('tracker')));}
   icons();
 }
@@ -702,8 +718,50 @@ function applicationFields(parent,row,doc){
   s.append(grid);const unknown=node('p','Data invio non registrata: sconosciuta.','muted');unknown.hidden=!!state.submitted_on;s.append(unknown);
   if(doc?.files?.pdf?.sha256)s.append(button('Registra questo CV','file-check',()=>{setApplicationRow(row,{cv_sha256:doc.files.pdf.sha256,cv_version:doc.files.pdf.name||doc.folder||''});grid.querySelector('input[aria-label="Versione CV"]').value=applicationState(row).cv_version;grid.querySelector('input[aria-label="Hash CV (SHA256)"]').value=applicationState(row).cv_sha256;}));
   const notes=node('label','Note personali','application-notes'),area=node('textarea');area.value=state.note||'';area.maxLength=8000;area.rows=4;area.setAttribute('aria-label','Note personali');area.oninput=()=>setApplicationRow(row,{note:area.value});notes.append(area);s.append(notes);
+  renderContacts(parent,row);
 }
-function tracked(row){const state=applicationState(row);return !!(state.favorite===true||state.checked||applicationStages.includes(state.stage)||['interested','drafted'].includes(state.stage)||state.matched_cv_id);}
+function renderContacts(parent,row){
+  const s=section(parent,'Persone da contattare'),list=node('div'),form=node('form'),grid=node('div',undefined,'application-fields'),status=node('p','','muted');
+  const roles={recruiter:'Recruiter',hiring_manager:'Responsabile del team',peer:'Collega',altro:'Altro'},inputs={};let editing=null;
+  for(const [key,label,type,limit]of [['name','Nome','text',80],['role','Ruolo','select'],['link','Link HTTPS','url',300],['note','Nota','text',200],['contacted_on','Contattato il','date']]){
+    const field=node('label',label),input=node(type==='select'?'select':'input');inputs[key]=input;input.setAttribute('aria-label',label);input.name=key;
+    if(type==='select'){for(const [value,text]of Object.entries(roles)){const option=node('option',text);option.value=value;input.append(option);}}
+    else input.type=type;
+    if(limit)input.maxLength=limit;if(key==='name')input.required=true;
+    field.append(input);grid.append(field);
+  }
+  const save=node('button','Salva contatto');save.type='submit';
+  form.append(grid,save,button('Annulla',null,()=>{editing=null;form.hidden=true;status.textContent='';}));form.hidden=true;
+  const add=button('Aggiungi contatto','plus',()=>edit(null));
+  function contacts(){return sanitizeContacts(applicationState(row).contacts);}
+  function edit(index){editing=index;const contact=index===null?{role:'recruiter'}:contacts()[index];for(const [key,input]of Object.entries(inputs))input.value=contact?.[key]||'';form.hidden=false;status.textContent='';inputs.name.focus();}
+  function draw(){
+    const entries=contacts();list.replaceChildren();
+    if(!entries.length)list.append(node('p','Nessun contatto annotato.','muted'));
+    entries.forEach((contact,index)=>{
+      const item=node('article',undefined,'linkedin-item');item.append(node('strong',contact.name),node('p',roles[contact.role],'muted'));
+      if(contact.link)item.append(safeLink(contact.link,'Apri profilo'));if(contact.note)item.append(node('p',contact.note));if(contact.contacted_on)item.append(node('p','Contattato il '+new Date(contact.contacted_on+'T00:00:00').toLocaleDateString('it-IT'),'muted'));
+      item.append(button('Modifica',null,()=>edit(index)),button('Rimuovi',null,()=>{const current=contacts();current.splice(index,1);setApplicationRow(row,{contacts:current});editing=null;form.hidden=true;draw();render();}));list.append(item);
+    });
+    add.disabled=entries.length>=10;
+  }
+  form.onsubmit=event=>{
+    event.preventDefault();if(!form.reportValidity())return;
+    const contact=Object.fromEntries(Object.entries(inputs).map(([key,input])=>[key,input.value]));
+    const clean=sanitizeContacts([contact]);if(!clean.length){status.textContent='Verifica nome, ruolo, data e link: sono ammessi solo link HTTPS.';return;}
+    const current=contacts();if(editing===null){if(current.length>=10)return;current.push(clean[0]);}else current[editing]=clean[0];
+    setApplicationRow(row,{contacts:current});editing=null;form.hidden=true;status.textContent='Contatto salvato.';draw();render();
+  };
+  s.append(list,add,form,status,node('h3','Cerca tu'));
+  const company=String(row.company||row.name||'').trim(),title=String(row.title||row.role||'').trim();
+  if(company){
+    const links=node('div',undefined,'actions'),people='https://www.linkedin.com/search/results/people/?keywords=';
+    for(const [label,query]of [['Recruiter',`"${company}" recruiter`],['Talent acquisition',`"${company}" talent acquisition`],['Responsabile del team',`"${company}" ${title} manager`]])links.append(safeLink(people+encodeURIComponent(query),label));
+    links.append(safeLink('https://www.linkedin.com/search/results/companies/?keywords='+encodeURIComponent(company),'Pagina aziendale'));s.append(links);
+  }
+  s.append(node('p','Career Desk non cerca persone in automatico e non scrive messaggi: apri tu i link e annota qui chi contattare.','muted'));draw();
+}
+function tracked(row){const state=applicationState(row);return !!(state.favorite===true||state.checked||applicationStages.includes(state.stage)||['interested','drafted'].includes(state.stage)||state.matched_cv_id||state.contacts?.length);}
 function todayISO(){const now=new Date();return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;}
 function isFollowUpDue(row){const state=applicationState(row);return CareerActions.quietSummary(state).needs_followup||!!(state.follow_up&&state.follow_up<=todayISO()&&['applied','interview'].includes(applicationStage(row)));}
 function renderTrackerSummary(visible){
@@ -717,7 +775,7 @@ function renderWorkbench(parent,row){
   const state=applicationState(row),documents=model.data.documents,ranked=CareerMatching.rank(row,documents);
   const controls=node('div',undefined,'match-controls'),label=node('label','CV da associare'),select=node('select');select.setAttribute('aria-label','CV da associare');
   const none=node('option','Scegli un CV dalla libreria');none.value='';select.append(none);
-  for(const {document:cv,evaluation}of ranked){const option=node('option',`${cv.folder} · ${evaluation.score===null?'n.d.':evaluation.score+'/100'}${cv.ready?' · verificato':' · da verificare'}`);option.value=cv.id;select.append(option);}
+  for(const {document:cv,evaluation}of ranked){const option=node('option',`${cv.folder} · ${evaluation.score===null?'n.d.':`${evaluation.score}/100 · ${scoreOutOfFive(evaluation.score)}/5`}${cv.ready?' · verificato':' · da verificare'}`);option.value=cv.id;select.append(option);}
   select.value=state.matched_cv_id||'';label.append(select);controls.append(label);
   const best=ranked.find(item=>item.evaluation.score!==null&&item.document.ready);
   const recommend=button('Associa il migliore verificato','sparkles',()=>associate(best.document.id));recommend.disabled=!best;controls.append(recommend);s.append(controls);
@@ -728,7 +786,7 @@ function renderWorkbench(parent,row){
     content.replaceChildren();const current=applicationState(row),cv=documents.find(doc=>doc.id===current.matched_cv_id);
     if(!cv){content.append(node('p',current.matched_cv_id?'Il CV associato non è più nella libreria. Scegli una versione disponibile.':'Associa un CV per ricalcolare il confronto e preparare la lettera.','muted'));return;}
     const evaluation=CareerMatching.evaluate(row,cv),hash=cv.files?.pdf?.sha256||cv.files?.docx?.sha256||'';
-    const summary=node('div',undefined,'match-summary');summary.append(node('strong',evaluation.score===null?'Confronto non disponibile':evaluation.score+'/100'),node('p',evaluation.score===null?({ 'Posting is incomplete':'Annuncio incompleto: integra il testo prima del confronto.', 'CV evidence is unavailable':'Testo del CV non disponibile.', 'No supported requirement could be identified':'Nessun requisito riconosciuto dal confronto locale.', 'Posting lists example skills only':'Sono stati riconosciuti solo esempi, senza requisiti da valutare.' }[evaluation.reason]||evaluation.reason):'Copertura delle competenze riconosciute nel testo dell’annuncio da parte di questo CV.'));
+    const summary=node('div',undefined,'match-summary');summary.append(node('strong',evaluation.score===null?'Confronto non disponibile':`${evaluation.score}/100 · ${scoreOutOfFive(evaluation.score)}/5`),node('p',evaluation.score===null?({ 'Posting is incomplete':'Annuncio incompleto: integra il testo prima del confronto.', 'CV evidence is unavailable':'Testo del CV non disponibile.', 'No supported requirement could be identified':'Nessun requisito riconosciuto dal confronto locale.', 'Posting lists example skills only':'Sono stati riconosciuti solo esempi, senza requisiti da valutare.' }[evaluation.reason]||evaluation.reason):'Copertura delle competenze riconosciute nel testo dell’annuncio da parte di questo CV.'));
     content.append(summary,node('p','Euristica locale basata sul testo: non è un punteggio ATS né una probabilità di colloquio.','muted'));
     if(!cv.ready)content.append(node('p','Questo CV richiede ancora verifica prima dell’invio.','notice'));
     if(current.matched_cv_sha256&&hash!==current.matched_cv_sha256)content.append(node('p','La versione del CV è cambiata dopo l’associazione: ricontrolla lettera e documento.','notice'));
@@ -751,7 +809,7 @@ function renderWorkbench(parent,row){
 function renderFit(parent,fit){
   if(!fit||typeof fit!=='object')return;
   const s=section(parent,'Affinità documentata /100'),heading=node('div',undefined,'fit-heading');
-  const score=Number.isFinite(fit.score)&&fit.score>=0&&fit.score<=100?fit.score+'/100':'Non disponibile';
+  const score=Number.isFinite(fit.score)&&fit.score>=0&&fit.score<=100?`${fit.score}/100 · ${scoreOutOfFive(fit.score)}/5`:'Non disponibile';
   const tiers={apply_now:'Candidatura diretta',bridge:'Ruolo ponte',insufficient_information:'Informazioni insufficienti',not_aligned:'Non allineato'},tier=node('span',tiers[fit.application_tier]||'Tier non disponibile','badge');tier.title=fit.application_tier||'';
   heading.append(node('strong',score,'fit-score'),tier);s.append(heading,node('p','Valutazione delle evidenze, non probabilità di successo.','muted'));
   if(fit.rationale)s.append(node('p',Array.isArray(fit.rationale)?fit.rationale.join('\n'):fit.rationale));

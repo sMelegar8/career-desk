@@ -21,9 +21,9 @@ const CareerSheet=(()=>{
     ['favorite','★','fav',52,true],['company','Azienda','ro',170,true],['role','Ruolo','ro',230,true],['place','Sede','ro',140,true],
     ['stage','Fase','stage',150,true],['submitted_on','Invio','date',130,true],['follow_up','Follow-up','date',130,true],
     ['channel','Canale','text',150,true],['recruiter','Recruiter / contatto','text',170,true],['outcome','Esito','text',190,true],
-    ['note','Note','text',240,true],['link','Annuncio','link',80,true],
+    ['note','Note','text',240,true],['contacts','Contatti','ro',110,true],['link','Annuncio','link',80,true],
     ['source','Fonte','ro',110,false],['deadline','Scadenza','date',130,false],['interview_on','Colloquio','date',130,false],
-    ['cv_version','Versione CV','text',170,false],['score','Allin. /100','ro',90,false],['updated','Aggiornata','ro',110,false]
+    ['cv_version','Versione CV','text',170,false],['score','Allineamento','ro',170,false],['updated','Aggiornata','ro',110,false]
   ];
   const STORE='career-sheet-columns-v1';
   function hidden(){
@@ -46,10 +46,11 @@ const CareerSheet=(()=>{
       case'score':{const s=alignmentScore(row);return s===null?'':s;}
       case'link':return row.link||row.url||'';
       case'updated':return (state.updatedAt||'').slice(0,10);
+      case'contacts':return sanitizeContacts(state.contacts).length||'';
       default:return state[key]||'';
     }
   }
-  function display(row,key){const v=value(row,key);if(key==='stage')return stages[v]||v;if((dates.includes(key)||key==='updated')&&v)return new Date(v+'T00:00:00').toLocaleDateString('it-IT');return String(v);}
+  function display(row,key){const v=value(row,key);if(key==='contacts')return v?v+' contatti':'';if(key==='stage')return stages[v]||v;if((dates.includes(key)||key==='updated')&&v)return new Date(v+'T00:00:00').toLocaleDateString('it-IT');return String(v);}
   // LinkedIn cards repeat the title after a screen-reader badge: 'Role (offerta di lavoro verificata) Role'.
   function cleanTitle(title){
     const parts=String(title).split(/\s*\((?:offerta di lavoro verificata|verified job)\)\s*/i).map(s=>s.trim()).filter(Boolean);
@@ -86,7 +87,7 @@ const CareerSheet=(()=>{
     }
     if(kind==='link'){const url=value(row,'link');if(url)td.append(safeLink(url,'Apri'));return td;}
     if(kind==='fav'){td.className='sheet-fav';td.append(favoriteButton(row,()=>render()));return td;}
-    if(kind==='ro'){td.textContent=display(row,key);td.title=td.textContent;return td;}
+    if(kind==='ro'){const v=value(row,key);td.textContent=key==='score'&&v!==''?`${v}/100 · ${scoreOutOfFive(v)}/5`:display(row,key);td.title=td.textContent;return td;}
     const input=node('input');input.type=kind==='date'?'date':'text';input.value=value(row,key);input.maxLength=key==='note'?8000:512;
     input.title=input.value;input.setAttribute('aria-label',(columns.find(c=>c[0]===key)[1])+' – '+(row.company||row.name||''));
     input.addEventListener('change',()=>{setApplicationRow(row,{[key]:input.value});input.title=input.value;flag(td,row,key);if(key==='follow_up')markRow(td.parentElement,row);});
@@ -111,7 +112,7 @@ const CareerSheet=(()=>{
     // Prefix spreadsheet formula triggers so exported text cannot run as a formula in Excel.
     const quote=v=>{let s=String(v??'');if(/^[=+\-@\t\r]/.test(s))s="'"+s;return '"'+s.replaceAll('"','""')+'"';};
     const lines=[columns.map(c=>quote(c[1])).join(';')];
-    for(const row of list)lines.push(columns.map(([key])=>quote(key==='link'?value(row,key):key==='favorite'?(value(row,key)?'sì':''):display(row,key))).join(';'));
+    for(const row of list)lines.push(columns.map(([key])=>quote(key==='contacts'?JSON.stringify(sanitizeContacts(applicationState(row).contacts)):key==='link'?value(row,key):key==='favorite'?(value(row,key)?'sì':''):display(row,key))).join(';'));
     return '﻿'+lines.join('\r\n');
   }
   function keepFocus(selector,fn){
