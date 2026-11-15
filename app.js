@@ -289,6 +289,11 @@ const favoriteCompanyFilters={onlyNew:false,verdict:'',showDiscouraged:false};
 try{const saved=JSON.parse(localStorage.getItem('career-favorite-filters')||'{}');favoriteCompanyFilters.onlyNew=saved.onlyNew===true;favoriteCompanyFilters.showDiscouraged=saved.showDiscouraged===true;}catch{}
 const favoriteVerdicts={consigliata:'Consigliata',da_valutare:'Da valutare',sconsigliata:'Sconsigliata'};
 function favoriteScore(posting){const score=posting.score;return posting.score_status!=='pending'&&score&&Number.isInteger(score.score)&&score.score>=0&&score.score<=100&&favoriteVerdicts[score.verdict]?score:null;}
+function appendFavoritePostingHints(parent,posting){
+  if(posting.stale_posting&&Number.isInteger(posting.age_days)){const badge=node('span',`Online da ${posting.age_days} giorni`,'badge warn');badge.title='Annuncio pubblicato da più di 60 giorni: verifica che sia ancora aperto prima di candidarti.';parent.append(badge);}
+  if(posting.closed_signals?.length){const badge=node('span','Chiusura da verificare','badge warn');badge.title='Il testo riporta: '+posting.closed_signals.join(' · ')+'. Verifica sul sito ufficiale.';parent.append(badge);}
+  if(posting.reposted){const badge=node('span','Possibile ripubblicazione','badge');badge.title='Una posizione con lo stesso titolo e luogo era già stata vista e poi chiusa sullo stesso sito.';parent.append(badge);}
+}
 function favoriteCompaniesNew(){return (model.data?.favorite_companies?.companies||[]).reduce((total,company)=>total+(company.postings||[]).filter(p=>p.active!==false&&p.is_new).length,0);}
 function renderFavoriteCompanies(){
   const root=$('favorite-companies-panel'),data=model.data.favorite_companies;root.replaceChildren();
@@ -311,7 +316,7 @@ function renderFavoriteCompanies(){
     const watch=(data.companies||[]).flatMap(company=>(company.postings||[]).filter(p=>p.active!==false&&good(p)&&(!favoriteCompanyFilters.onlyNew||p.is_new)).map(p=>({...p,company_name:company.name}))).sort(sort).slice(0,10);
     const strip=node('section',undefined,'favorite-watch');strip.append(node('h2','Da guardare'));
     if(!watch.length)strip.append(node('p','Nessuna posizione da guardare con questi filtri.','muted'));
-    for(const posting of watch){const row=node('div',undefined,'compact-row');row.append(node('span',posting.company_name+' · '+posting.title),node('span',favoriteScore(posting).score+'/100','badge'),safeLink(posting.url,'Apri'));strip.append(row);}body.append(strip);
+    for(const posting of watch){const row=node('div',undefined,'compact-row');row.append(node('span',posting.company_name+' · '+posting.title),node('span',favoriteScore(posting).score+'/100','badge'),safeLink(posting.url,'Apri'));appendFavoritePostingHints(row,posting);strip.append(row);}body.append(strip);
     for(const company of data.companies||[]){
       const section=node('details',undefined,'linkedin-section favorite-company'),postings=(company.postings||[]).filter(p=>p.active!==false),look=postings.filter(good).length,fresh=postings.filter(p=>p.is_new).length;
       section.open=look>0||fresh>0;const header=node('summary');header.append(node('strong',`${company.name} · ${postings.length} posizioni · ${look} da guardare · ${fresh} nuove`));
@@ -328,6 +333,7 @@ function renderFavoriteCompanies(){
         link.className='favorite-company-title';title.append(link);heading.append(title,badges);card.append(heading);
         badges.append(node('span',score?`${score.score}/100 · ${favoriteVerdicts[score.verdict]}`:'Analisi in attesa','badge '+(score?.verdict==='consigliata'?'ready':score?.verdict==='da_valutare'?'warn':'')));
         if(posting.is_new)badges.append(node('span','Nuova','badge ready'));
+        appendFavoritePostingHints(badges,posting);
         card.append(node('p',[posting.location,posting.posted_at?'Pubblicata il '+date(posting.posted_at):'',(score?'CV: ':'CV suggerito (provvisorio): ')+cvLabel(score?.cv_key||posting.provisional_cv_key)].filter(Boolean).join(' · '),'favorite-company-cv'));
         if(score?.verdict!=='sconsigliata'&&score?.summary_it)card.append(node('p',score.summary_it,'favorite-company-summary'));
         const details=node('details',undefined,'favorite-company-gaps');details.append(node('summary',`Dettagli e lacune (${(score?.gaps||[]).length})`));
@@ -664,8 +670,8 @@ function renderToday(){
   for(const item of todo.sort((a,b)=>a.priority-b.priority||a.at.localeCompare(b.at)).slice(0,6)){const row=node('div',undefined,'compact-row');row.append(node('span',item.text),button('Apri',null,item.open));tasks.append(row);}
   if(!todo.length)tasks.append(node('p','Niente da fare oggi.','muted'));
   const fresh=todayFavoritePostings().filter(p=>p.is_new&&favoriteScore(p)?.verdict!=='sconsigliata').sort((a,b)=>(favoriteScore(b)?.score??-1)-(favoriteScore(a)?.score??-1)).slice(0,5);
-  if(fresh.length){const section=part('Nuove dalle aziende preferite');for(const posting of fresh){const score=favoriteScore(posting),row=node('div',undefined,'compact-row');row.append(node('span',posting.company+' · '+posting.title),node('span',score?score.score+'/100':'Analisi in attesa','badge'),safeLink(posting.url,'Apri'));section.append(row);}section.append(button('Vedi tutte',null,()=>goToView('favorite-companies')));}
-  const candidates=todayCandidates();if(candidates.length){const section=part('Migliori da valutare');for(const item of candidates){const row=node('div',undefined,'compact-row');row.append(node('span',item.company+' · '+item.title),node('span',item.score+'/100','badge'),node('span','CV: '+item.cv,'muted'),item.official?safeLink(item.url,'Apri'):button('Apri',null,()=>showDetail(item.row)));section.append(row);}}
+  if(fresh.length){const section=part('Nuove dalle aziende preferite');for(const posting of fresh){const score=favoriteScore(posting),row=node('div',undefined,'compact-row');row.append(node('span',posting.company+' · '+posting.title),node('span',score?score.score+'/100':'Analisi in attesa','badge'),safeLink(posting.url,'Apri'));appendFavoritePostingHints(row,posting);section.append(row);}section.append(button('Vedi tutte',null,()=>goToView('favorite-companies')));}
+  const candidates=todayCandidates();if(candidates.length){const section=part('Migliori da valutare');for(const item of candidates){const row=node('div',undefined,'compact-row');row.append(node('span',item.company+' · '+item.title),node('span',item.score+'/100','badge'),node('span','CV: '+item.cv,'muted'),item.official?safeLink(item.url,'Apri'):button('Apri',null,()=>showDetail(item.row)));if(item.official)appendFavoritePostingHints(row,item.row);section.append(row);}}
   const sent=applications.filter(r=>isApplied(r));if(sent.length){const section=part('Le mie candidature'),numbers=node('div',undefined,'today-numbers');for(const [label,count]of [['Inviate',sent.length],['Colloqui',sent.filter(r=>applicationStage(r)==='interview').length],['Offerte',sent.filter(r=>applicationStage(r)==='offer').length],['Esiti negativi',sent.filter(r=>applicationStage(r)==='rejected').length]]){const value=node('div');value.append(node('strong',String(count)),node('span',label));numbers.append(value);}section.append(numbers,button('Apri candidature',null,()=>goToView('tracker')));}
   icons();
 }

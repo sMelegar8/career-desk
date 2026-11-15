@@ -70,6 +70,7 @@ const CareerActions=(()=>{
       if(!row.complete)s.append(node('p','Lettera non disponibile: manca il testo completo dell’annuncio.','muted'));
       else if(gates(row).verdict==='FAIL')s.append(node('p','Lettera non disponibile: un requisito obbligatorio dell’annuncio risulta non soddisfatto.','muted'));
       run('Richiedi preparazione colloquio','interview_prep',row.complete);
+      run('Richiedi risposte per il modulo','form_answers',row.complete);
     }
     // Tailored CV only for favourites (candidate decision 6 Nov 2026); it stays a draft until approved.
     if(applicationState(row).favorite===true){
@@ -87,7 +88,7 @@ const CareerActions=(()=>{
       if(options.tailoredOnly&&artifact.kind!=='tailored_cv')continue;
       const article=node('article',undefined,'detail-section');article.append(node('h4',artifact.label_it||artifact.status));
       for(const format of ['pdf','docx'])if(artifact.files?.[format])article.append(button(format==='pdf'?'Apri PDF':'Scarica Word','download',async()=>{try{saveBlob(await bytes(row,artifact,format),artifact.files[format].name,'application/octet-stream');}catch(error){toast(error.message);}}));
-      if(artifact.text){const text=node('textarea');text.value=artifact.text;text.readOnly=true;text.rows=7;text.setAttribute('aria-label','Sollecito da copiare');article.append(text,button('Copia sollecito','copy',()=>navigator.clipboard.writeText(artifact.text).then(()=>toast('Testo copiato.')).catch(()=>toast('Seleziona il testo e copialo.'))));}
+      if(artifact.text){const form=artifact.kind==='form_answers',text=node('textarea');text.value=artifact.text;text.readOnly=true;text.rows=7;text.setAttribute('aria-label',form?'Risposte per il modulo da copiare':'Sollecito da copiare');article.append(text,button(form?'Copia risposte':'Copia sollecito','copy',()=>navigator.clipboard.writeText(artifact.text).then(()=>toast('Testo copiato.')).catch(()=>toast('Seleziona il testo e copialo.'))));}
       if(artifact.kind==='tailored_cv'){
         if(artifact.base_label)article.append(node('p','Partito da '+artifact.base_label,'muted'));
         const list=(title,items)=>{if(!items?.length)return;article.append(node('h4',title));const ul=node('ul');for(const item of items)ul.append(node('li',item));article.append(ul);};
