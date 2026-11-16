@@ -1,0 +1,51 @@
+{
+  "id": "w01-dentro-la-zucca",
+  "title": "Dentro la zucca c'è un borgo",
+  "series": "dentro-ce",
+  "publishDate": "2026-10-28",
+  "platforms": [
+    "shorts",
+    "reels",
+    "facebook",
+    "tiktok",
+    "pinterest"
+  ],
+  "clips": [
+    {
+      "file": "01.mp4",
+      "seconds": 8,
+      "prompt": "Vertical 9:16 close-up. A large orange pumpkin on a rustic wooden table in warm autumn light. A chef's knife cuts a clean slice out of its side and the piece falls away, revealing inside a tiny glowing miniature medieval hill village made of pumpkin flesh, with stone houses, warm lit windows and a small bell tower. Tilt-shift miniature look, photorealistic, magical, 4K. Audio: satisfying wet pumpkin crunch, then faint distant church bells and soft wind. No music, no voice, no text."
+    },
+    {
+      "file": "02.mp4",
+      "seconds": 8,
+      "prompt": "Vertical 9:16 slow push-in macro inside a pumpkin. A miniature autumn hill village carved from orange pumpkin flesh: narrow cobbled lanes, tiny glowing windows, autumn trees with red leaves, a winding path with miniature street lamps, light fog drifting between houses at dusk. Tilt-shift, cozy, highly detailed, photorealistic. Audio: soft village ambience, crickets, leaves rustling, distant bells. No music, no voice, no text. No real landmarks."
+    },
+    {
+      "file": "03.mp4",
+      "seconds": 8,
+      "prompt": "Vertical 9:16 pull-back shot. The camera slowly pulls back from the tiny glowing village inside the cut pumpkin to reveal the whole pumpkin on a wooden table at night, its cut window glowing warmly like a lantern, autumn leaves around, candlelight. Cozy Halloween mood, photorealistic. Audio: gentle crackle of a candle, soft night ambience. No music, no voice, no text."
+    }
+  ],
+  "overlays": [
+    {
+      "text": "Dentro questa zucca\nc'è un borgo",
+      "start": 0.3,
+      "end": 3.2
+    },
+    {
+      "text": "Lo sapevi? I tortelli di zucca sono\nun piatto della tradizione mantovana",
+      "start": 17,
+      "end": 23.5,
+      "size": 52,
+      "y": "h*0.70"
+    }
+  ],
+  "captions": {
+    "youtubeTitle": "Ho tagliato una zucca e dentro c'era un borgo 🎃✨ (AI)",
+    "youtubeDescription": "Un borgo d'autunno in miniatura nascosto dentro una zucca. 🤖 Video generato con IA.\n#asmr #halloween #aiart",
+    "instagram": "Taglio una zucca e dentro… un borgo d'autunno 🎃✨\nTagga chi ci andrebbe a vivere 👇\n🤖 Video generato con IA\n#halloween #autunno #aiart #asmr",
+    "tiktok": "dentro questa zucca c'è un borgo 🎃✨ #halloween #aiart #asmr #autunno",
+    "pinnedComment": "Che cosa nascondo dentro il prossimo frutto? Le idee migliori diventano video 👇"
+  }
+}

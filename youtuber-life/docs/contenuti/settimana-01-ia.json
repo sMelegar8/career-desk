@@ -1,0 +1,75 @@
+{
+  "videos": [
+    {
+      "id": "w01-melograno-cristallo",
+      "title": "Melograno di cristallo",
+      "notes": "Clip da generare: 3 × 8 s (9:16) – prompt in studio/specs/w01-melograno-cristallo.json\nTesti a schermo:\n- Melograno di cristallo / Crystal pomegranate (0.3–3.2 s)\n- Lo sapevi? In Italia il melograno / è di stagione da settembre a gennaio (17–23.5 s)\n\nMontaggio: python3 studio/assemble.py build w01-melograno-cristallo",
+      "tags": [
+        "ia"
+      ],
+      "stage": "script",
+      "platforms": [
+        "shorts",
+        "reels",
+        "facebook",
+        "tiktok"
+      ],
+      "series": "cristallo-italiano",
+      "provider": "flow",
+      "compliance": {
+        "ip": true,
+        "adv": true
+      },
+      "publishDate": "2026-10-24",
+      "createdAt": "2026-10-20T09:00:00.000Z"
+    },
+    {
+      "id": "w01-zucca-lava",
+      "title": "Zucca di lava",
+      "notes": "Clip da generare: 3 × 8 s (9:16) – prompt in studio/specs/w01-zucca-lava.json\nTesti a schermo:\n- Zucca di lava / Lava pumpkin (0.3–3.2 s)\n- Lo sapevi? La zucca è arrivata in Europa / dalle Americhe nel Cinquecento (17–23.5 s)\n\nMontaggio: python3 studio/assemble.py build w01-zucca-lava",
+      "tags": [
+        "ia"
+      ],
+      "stage": "script",
+      "platforms": [
+        "shorts",
+        "reels",
+        "facebook",
+        "tiktok"
+      ],
+      "series": "materiali-impossibili",
+      "provider": "flow",
+      "compliance": {
+        "ip": true,
+        "adv": true
+      },
+      "publishDate": "2026-10-26",
+      "createdAt": "2026-10-20T09:00:00.000Z"
+    },
+    {
+      "id": "w01-dentro-la-zucca",
+      "title": "Dentro la zucca c'è un borgo",
+      "notes": "Clip da generare: 3 × 8 s (9:16) – prompt in studio/specs/w01-dentro-la-zucca.json\nTesti a schermo:\n- Dentro questa zucca / c'è un borgo (0.3–3.2 s)\n- Lo sapevi? I tortelli di zucca sono / un piatto della tradizione mantovana (17–23.5 s)\n\nMontaggio: python3 studio/assemble.py build w01-dentro-la-zucca",
+      "tags": [
+        "ia"
+      ],
+      "stage": "script",
+      "platforms": [
+        "shorts",
+        "reels",
+        "facebook",
+        "tiktok",
+        "pinterest"
+      ],
+      "series": "dentro-ce",
+      "provider": "flow",
+      "compliance": {
+        "ip": true,
+        "adv": true
+      },
+      "publishDate": "2026-10-28",
+      "createdAt": "2026-10-20T09:00:00.000Z"
+    }
+  ],
+  "incomes": []
+}

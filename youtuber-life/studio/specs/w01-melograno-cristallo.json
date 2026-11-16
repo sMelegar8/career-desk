@@ -1,0 +1,51 @@
+{
+  "id": "w01-melograno-cristallo",
+  "title": "Melograno di cristallo",
+  "series": "cristallo-italiano",
+  "publishDate": "2026-10-24",
+  "platforms": [
+    "shorts",
+    "reels",
+    "facebook",
+    "tiktok"
+  ],
+  "clips": [
+    {
+      "file": "01.mp4",
+      "seconds": 5,
+      "prompt": "Vertical 9:16 extreme macro shot. A pomegranate made entirely of translucent ruby-red glass sits on a dark walnut cutting board. A sharp stainless steel chef's knife slowly slices down through it; the glass splits cleanly, revealing hundreds of glossy faceted glass seeds glinting inside. Soft warm side light from the left, black background, shallow depth of field, photorealistic, 4K. Audio: crisp crystalline cracking and delicate glass crunching, very close-mic ASMR. No music, no voice, no text, no hands visible except the knife."
+    },
+    {
+      "file": "02.mp4",
+      "seconds": 5,
+      "prompt": "Vertical 9:16 top-down overhead shot. Two halves of a ruby-red glass pomegranate fall open on a dark walnut cutting board and hundreds of tiny faceted glass seeds spill out like rubies, bouncing and sparkling. Soft side light, black background, photorealistic, slow motion. Audio: cascading tinkling glass beads, gentle chimes, close-mic ASMR. No music, no voice, no text."
+    },
+    {
+      "file": "03.mp4",
+      "seconds": 5,
+      "prompt": "Vertical 9:16 macro slow motion. A wooden spoon taps the back of half a ruby-red glass pomegranate held over a clear crystal bowl; a rain of glittering glass seeds pours into the bowl, catching the light. Dark moody kitchen, warm rim light, photorealistic. Audio: rhythmic wooden taps followed by a shower of tinkling glass, ASMR. No music, no voice, no text."
+    }
+  ],
+  "overlays": [
+    {
+      "text": "Melograno di cristallo\nCrystal pomegranate",
+      "start": 0.3,
+      "end": 3.0
+    },
+    {
+      "text": "Lo sapevi? In Italia il melograno\nè di stagione da settembre a gennaio",
+      "start": 9.8,
+      "end": 14.6,
+      "size": 52,
+      "y": "h*0.70"
+    }
+  ],
+  "captions": {
+    "youtubeTitle": "Melograno di cristallo 🍎 ASMR (AI)",
+    "youtubeDescription": "Taglio un melograno fatto di vetro: chicchi di cristallo che cadono come rubini. 🤖 Video generato con IA.\n#asmr #satisfying #aiart",
+    "instagram": "Un melograno… di cristallo 🍎✨\nAlza il volume 🔊\n🤖 Video generato con IA\n#asmr #satisfying #aiart #melograno",
+    "tiktok": "melograno di cristallo 🍎🔊 #asmr #satisfying #aiart #glass",
+    "pinnedComment": "Prossimo frutto di cristallo? Scrivilo qui sotto 👇 il più votato lo taglio sabato prossimo"
+  },
+  "renderer": "studio/render/melograno.py (Blender, rendering 3D procedurale: nessun provider esterno)"
+}

@@ -1,0 +1,51 @@
+{
+  "id": "w01-zucca-lava",
+  "title": "Zucca di lava",
+  "series": "materiali-impossibili",
+  "publishDate": "2026-10-26",
+  "platforms": [
+    "shorts",
+    "reels",
+    "facebook",
+    "tiktok"
+  ],
+  "clips": [
+    {
+      "file": "01.mp4",
+      "seconds": 5,
+      "prompt": "Vertical 9:16 close-up. A pumpkin made of black cooled volcanic lava with glowing orange cracks sits on a dark slate board, wisps of smoke rising. A heavy chef's knife presses into the top and the crust cracks open with bright molten orange light bursting from inside. Dark Halloween atmosphere, cinematic low-key lighting, photorealistic, 4K. Audio: deep rocky crunch, sizzling and crackling embers, low rumble, ASMR. No music, no voice, no text."
+    },
+    {
+      "file": "02.mp4",
+      "seconds": 5,
+      "prompt": "Vertical 9:16 macro slow motion. The knife slides down through a lava pumpkin; the black obsidian crust splits into two halves revealing a glowing liquid-orange molten interior that slowly oozes onto the slate board, steam and sparks rising. Photorealistic, cinematic, dark background. Audio: thick bubbling magma, sizzling, cracking stone, ASMR close-mic. No music, no voice, no text."
+    },
+    {
+      "file": "03.mp4",
+      "seconds": 5,
+      "prompt": "Vertical 9:16 top-down shot. Two halves of a lava pumpkin on a slate board, the molten core glowing and slowly cooling from bright orange to deep red as glowing seeds made of embers pulse inside. Smoke drifts, dark Halloween mood, photorealistic. Audio: soft crackling embers and gentle hissing, ASMR. No music, no voice, no text."
+    }
+  ],
+  "overlays": [
+    {
+      "text": "Zucca di lava\nLava pumpkin",
+      "start": 0.3,
+      "end": 3.0
+    },
+    {
+      "text": "Lo sapevi? La zucca è arrivata in Europa\ndalle Americhe nel Cinquecento",
+      "start": 9.8,
+      "end": 14.6,
+      "size": 52,
+      "y": "h*0.70"
+    }
+  ],
+  "captions": {
+    "youtubeTitle": "Taglio una zucca di LAVA 🎃🔥 ASMR (AI)",
+    "youtubeDescription": "Speciale Halloween: una zucca di roccia vulcanica con il cuore fuso. 🤖 Video generato con IA.\n#asmr #halloween #aiart",
+    "instagram": "Zucca di Halloween… ma di lava 🎃🔥\nAudio ON 🔊\n🤖 Video generato con IA\n#halloween #asmr #satisfying #aiart",
+    "tiktok": "zucca di lava 🎃🔥 audio on #halloween #asmr #aiart #satisfying",
+    "pinnedComment": "Mercoledì apro una zucca con qualcosa di inaspettato dentro 👀 indovinate cosa"
+  },
+  "renderer": "studio/render/zucca_lava.py (Blender, rendering 3D procedurale: nessun provider esterno)"
+}
