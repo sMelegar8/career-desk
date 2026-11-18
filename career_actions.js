@@ -57,6 +57,103 @@ const CareerActions=(()=>{
     if(!response.ok)throw new Error('Documento modificato o non disponibile: aggiorna il catalogo.');
     return response.arrayBuffer();
   }
+  const autoApplyLabels={queued:'In coda',preparing:'In preparazione',needs_intervention:'Serve il tuo intervento',not_applicable:'Non candidabile',manual_handoff:'Da completare manualmente',awaiting_review:'Da rivedere',approved:'Approvata, in attesa del PC',submitting:'Invio in corso',submitted:'Inviata',needs_verification:'Da verificare',failed:'Preparazione non riuscita'};
+  function autoApplyState(row){return row.auto_apply||(model.data.auto_apply||model.data.autoApply||{})[row.job_id]||{};}
+  function autoApplyButton(parent,row){
+    if(row.kind!=='job'||!row.job_id)return;
+    const state=autoApplyState(row);
+    if(state.status)parent.append(node('span','Auto Apply · '+(autoApplyLabels[state.status]||state.status),'badge '+(['awaiting_review','needs_intervention','needs_verification'].includes(state.status)?'warn':'')));
+    if(isApplied(row)||!row.complete)return;
+    const busy=['queued','preparing','approved','submitting','submitted','needs_verification'].includes(state.status),available=model.local||CareerCloud.connected;
+    const b=button(state.status==='awaiting_review'?'Rivedi candidatura':'Candidati (Auto Apply)','send',async()=>{
+      if(state.status==='awaiting_review'){showDetail(row);return;}
+      b.disabled=true;try{await request(row,'auto_apply');}catch(error){toast(error.message);}finally{b.disabled=busy||!available;}
+    });b.disabled=busy||!available;parent.append(b);
+  }
+  function fieldValue(field){const value=field.value??field.mapping?.value;return value===null||value===undefined?'':typeof value==='object'?JSON.stringify(value):String(value);}
+  const profileLabels={first_name:'Nome',last_name:'Cognome',full_name:'Nome completo',email:'Email',phone:'Telefono',city:'Città',postal_code:'CAP',country:'Nazione',address:'Indirizzo',date_of_birth:'Data di nascita',linkedin:'LinkedIn',website:'Sito / portfolio',orcid:'ORCID',education:'Titoli di studio',languages:'Lingue',current_title:'Ruolo attuale',current_company:'Azienda attuale',notice_period:'Preavviso',availability:'Disponibilità',salary_current:'RAL attuale',salary_desired:'RAL desiderata',driving_license:'Patente',work_permit:'Permesso di lavoro',work_authorization:'Diritto al lavoro',citizenship:'Cittadinanza',relocation:'Trasferimento',protected_category:'Categorie protette (L. 68/99)',disability:'Invalidità',health:'Salute',diversity:'Diversità',criminal_record:'Precedenti penali',pregnancy:'Gravidanza',religion:'Religione',union:'Sindacato',required_privacy:'Privacy necessaria',talent_pool:'Talent pool',marketing:'Marketing'};
+  async function renderProfile(parent){
+    const session=model.session;parent.replaceChildren(node('p','Caricamento profilo…','muted'));
+    try{
+      const result=model.local?await localAPI('application-profile'):{profile:model.data.application_profile};if(session!==model.session)return;
+      const profile=result.profile||result.application_profile||result,fields=profile?.fields;
+      parent.replaceChildren(node('p',model.local?'Modifica i dati confermati e le regole sul PC. I dati mancanti restano vuoti.':'Profilo in sola lettura. Per modificarlo apri Career Desk sul PC.','notice'));
+      if(!fields){parent.append(node('p','Il profilo è disponibile solo sul PC; non viene pubblicato in chiaro.','muted'));return;}
+      const form=node('form',undefined,'application-profile-form'),inputs=new Map(),rules=profile.rules||{},ruleInputs={};
+      form.onsubmit=event=>event.preventDefault();
+      for(const [key,item]of Object.entries(fields)){
+        if(/password|passwd|pwd|token|secret/i.test(key))continue;
+        const entry=item&&typeof item==='object'&&Object.hasOwn(item,'value')?item:{value:item},label=node('label',profileLabels[key]||key.replaceAll('_',' ')),value=entry.value;
+        if(value&&typeof value==='object'){label.append(node('pre',JSON.stringify(value,null,2)));}
+        else{const input=node('input');input.type='text';input.maxLength=2000;input.value=value??'';input.disabled=!model.local;label.append(input);inputs.set(key,input);}
+        label.append(node('span','Fonte: '+(entry.source||'non documentata')+' · '+(entry.status||(!value?'missing':'confirmed')),'muted'));form.append(label);
+      }
+      for(const [group,title]of [['sensitive_policy','Domande delicate'],['consents','Consensi']]){
+        const values=rules[group]||profile[group]||{};if(!Object.keys(values).length)continue;
+        const block=node('fieldset');block.append(node('legend',title));ruleInputs[group]={};
+        for(const [key,value]of Object.entries(values)){const label=node('label',profileLabels[key]||key.replaceAll('_',' ')),select=node('select');for(const [choice,text]of [['ask','Chiedi ogni volta'],['yes','Sì'],['no','No']]){const option=node('option',text);option.value=choice;select.append(option);}if(typeof value==='string'&&!['ask','yes','no'].includes(value)){const current=node('option',value);current.value=value;select.append(current);}select.value=typeof value==='boolean'?(value?'yes':'no'):String(value||'ask');if(!select.value)select.value='ask';select.disabled=!model.local;label.append(select);block.append(label);ruleInputs[group][key]=select;}form.append(block);
+      }
+      if(model.local){const save=button('Salva profilo candidatura','save',async()=>{if(!form.reportValidity())return;const values={};for(const [key,input]of inputs)values[key]=input.value.trim()||null;const updateRules={};for(const [group,items]of Object.entries(ruleInputs)){updateRules[group]={};for(const [key,input]of Object.entries(items))updateRules[group][key]=input.value==='yes'?true:input.value==='no'?false:input.value;}save.disabled=true;try{await localAPI('application-profile',{version:1,fields:values,rules:updateRules});toast('Profilo candidatura salvato.');await renderProfile(parent);}catch(error){toast(error.message);save.disabled=false;}},'primary');form.append(save);}
+      parent.append(form);
+      const bank=result.answer_bank?.entries||result.answer_bank?.answers||[];
+      if(Array.isArray(bank)&&bank.length){const s=section(parent,'Banca risposte');for(const entry of bank){const item=node('details');item.append(node('summary',entry.question||entry.normalized_question||'Risposta confermata'),node('p',String(entry.answer??'')),node('p',entry.scope==='global'?'Salvata per sempre':'Solo per questo annuncio','muted'));s.append(item);}}
+    }catch(error){if(session===model.session)parent.replaceChildren(node('p',error.message,'form-error'));}
+  }
+  function renderAutoApply(parent,row){
+    if(row.kind!=='job'||!row.job_id)return;
+    const state=autoApplyState(row);if(!state.status)return;
+    const s=section(parent,'Candidatura assistita · '+(autoApplyLabels[state.status]||state.status)),pack=state.package||{},available=model.local||CareerCloud.connected;
+    if(state.reason)s.append(node('p',state.reason,'notice'));
+    if(state.diff||state.requires_reprepare||pack.complete_form===false){
+      const retry=button('Riprepara candidatura','refresh-cw',async()=>{retry.disabled=true;try{await request(row,'auto_apply_retry');}catch(error){toast(error.message);retry.disabled=!available;}});retry.disabled=!available;s.append(retry);
+    }
+    if(pack.complete_form===false)s.append(node('p','Modulo parziale: conferma le risposte per proseguire la preparazione. Il PC non invia finché il modulo completo non è stato rivisto.','notice'));
+    if(state.status==='needs_intervention'){
+      s.append(node('p','Apri sul PC: Career Desk → Apri browser candidatura. Completa accesso, account o verifica nel browser dedicato; la preparazione riprenderà dopo la chiusura.'));
+      if(model.local)s.append(button('Apri browser candidatura','external-link',async()=>{try{await localAPI('auto-apply-browser',{job_id:row.job_id});toast('Browser candidatura avviato sul PC.');}catch(error){toast(error.message);}}));
+    }
+    if(state.status==='needs_verification')s.append(node('p','Controlla sul portale se la candidatura è arrivata. Nessun nuovo invio automatico.','notice'));
+    if(state.status==='manual_handoff'){
+      if(state.apply_url)s.append(safeLink(state.apply_url,'Apri candidatura sul portale'));
+      const text=(pack.fields||[]).map(field=>(field.label||field.field_id)+': '+(fieldValue(field)||'[DA COMPLETARE]')).join('\n\n'),area=node('textarea');area.value=text;area.readOnly=true;area.rows=10;area.setAttribute('aria-label','Risposte da copiare sul portale');
+      s.append(node('p','Completa e invia manualmente sul portale. Le risposte mancanti restano da confermare.'),area,button('Copia risposte','copy',()=>navigator.clipboard.writeText(text).then(()=>toast('Risposte copiate.')).catch(()=>toast('Seleziona il testo e copialo.'))));return;
+    }
+    if(!['awaiting_review','approved','submitting','submitted'].includes(state.status))return;
+    const cv=pack.cv||{};s.append(node('p','CV scelto: '+(cv.label||cv.name||'CV approvato'),'auto-apply-cv'));
+    if(cv.reason||pack.cv_reason)s.append(node('p',cv.reason||pack.cv_reason,'muted'));
+    if(cv.sha256||cv.sha)s.append(node('p','SHA256: '+(cv.sha256||cv.sha),'auto-apply-hash'));
+    if(state.diff||pack.diff)s.append(node('p','Il modulo è cambiato: '+JSON.stringify(state.diff||pack.diff),'notice'));
+    const form=node('form',undefined,'auto-apply-review'),editors=new Map(),flags=new Map();
+    form.onsubmit=event=>event.preventDefault();
+    for(const field of pack.fields||[]){
+      if(!field.field_id)continue;
+      const group=node('div',undefined,'auto-apply-field'),label=node('label',(field.label||field.field_id)+(field.required?' *':'')),source=field.source||field.mapping?.source||'missing';
+      group.append(label,node('p','Fonte: '+source+((field.needs_review||source==='missing')?' · Da rivedere':''),'muted'));
+      let input;
+      if(field.type==='file'){group.append(node('p',fieldValue(field)||'Documento approvato da caricare a cura del worker.','muted'));}
+      else{
+        const options=field.options||[];
+        if(options.length){input=node('select');const empty=node('option','Scegli una risposta');empty.value='';input.append(empty);for(const item of options){const value=typeof item==='object'?String(item.value??item.label??''):String(item),option=node('option',typeof item==='object'?String(item.label??item.value??''):String(item));option.value=value;input.append(option);}}
+        else if(field.type==='checkbox'){input=node('select');for(const [value,text]of [['','Da confermare'],['true','Sì'],['false','No']]){const option=node('option',text);option.value=value;input.append(option);}}
+        else{input=node('textarea');input.rows=field.type==='textarea'?4:2;input.maxLength=Math.min(Number(field.maxlength)||2000,2000);}
+        input.value=fieldValue(field);input.required=!!field.required;input.setAttribute('aria-label',field.label||field.field_id);input.disabled=state.status!=='awaiting_review';label.append(input);editors.set(field.field_id,input);
+        const saveLabel=node('label','Conserva risposta'),save=node('select');for(const [value,text]of [['job','Solo qui'],['global','Salva per sempre']]){const option=node('option',text);option.value=value;save.append(option);}save.value='job';save.disabled=input.disabled;save.setAttribute('aria-label','Conserva risposta: '+(field.label||field.field_id));saveLabel.append(save);group.append(saveLabel);flags.set(field.field_id,save);
+      }
+      const evidence=field.evidence||field.mapping?.evidence;if(evidence?.length)group.append(node('blockquote',evidence.join('\n')));
+      form.append(group);
+    }
+    for(const shot of pack.screenshots||[]){
+      const name=typeof shot==='string'?shot:shot.name;if(!name||!/^[-\w.]+\.(png|jpe?g)$/i.test(name))continue;
+      const preview=node('div');form.append(button('Mostra screenshot: '+(shot.label||name),'image',async()=>{
+        try{let data;if(!model.local&&shot.encrypted_url)data=await decrypt(await fetchJSON(shot.encrypted_url));else if(model.local){const query=new URLSearchParams({job_id:row.job_id,name}),response=await fetch('/api/auto-apply-screenshot?'+query,{headers:{'X-Desk-Client':'1'}});if(!response.ok)throw new Error('Screenshot non disponibile.');data=await response.arrayBuffer();}else throw new Error('Screenshot disponibile sul PC.');const image=node('img'),url=URL.createObjectURL(new Blob([data],{type:'image/png'}));image.alt=shot.label||'Modulo candidatura';image.onload=()=>URL.revokeObjectURL(url);image.src=url;preview.replaceChildren(image);}catch(error){toast(error.message);}
+      }),preview);
+    }
+    if(state.status==='awaiting_review'){
+      const reviewed=node('input'),label=node('label',' Ho verificato tutti i campi');reviewed.type='checkbox';reviewed.disabled=!!state.requires_reprepare;label.prepend(reviewed);
+      const approve=button('Approva e invia','check',async()=>{if(!reviewed.checked||state.requires_reprepare||!form.reportValidity())return;approve.disabled=true;const answers={},save_flags={};for(const [id,input]of editors){answers[id]=input.value;save_flags[id]=flags.get(id).value;}try{await request(row,'approve_auto_apply',{package_sha:state.package_sha||pack.package_sha,answers,save_flags});$('detail').close();}catch(error){toast(error.message);approve.disabled=!reviewed.checked||!available||!!state.requires_reprepare;}} ,'primary');approve.disabled=true;reviewed.onchange=()=>{approve.disabled=!reviewed.checked||!available||!!state.requires_reprepare;};form.append(label,approve,node('p','L’approvazione vale 7 giorni ed è legata a questo pacchetto. Il PC invia solo dopo i controlli sul modulo e sui documenti.','muted'));
+    }
+    s.append(form);
+  }
   function renderDocuments(parent,row,options={}){
     if(row.kind!=='job'||!row.job_id)return;
     const s=section(parent,'Documenti e azioni su richiesta'),available=model.local||CareerCloud.connected;
@@ -107,5 +204,5 @@ const CareerActions=(()=>{
     }
     s.append(node('p','Le bozze non vengono inviate. Lettera e CV adattato richiedono la tua approvazione (legata agli hash dei file) prima della copia su Drive.','muted'));
   }
-  return {quietSummary,gateNotes,badges,renderDocuments};
+  return {quietSummary,gateNotes,badges,renderDocuments,autoApplyState,autoApplyButton,renderAutoApply,renderProfile};
 })();
